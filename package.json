@@ -1,0 +1,46 @@
+{
+  "name": "gridrival",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf:deploy": "wrangler deploy",
+    "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "sync": "npx tsx scripts/sync-data.ts",
+    "sync:incremental": "npx tsx scripts/sync-data.ts --incremental",
+    "compute": "npx tsx scripts/compute-comparisons.ts"
+  },
+  "dependencies": {
+    "@opennextjs/cloudflare": "^1.8.0",
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "@supabase/supabase-js": "^2.44.0",
+    "@supabase/ssr": "^0.4.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.3.0",
+    "recharts": "^2.12.7",
+    "@vercel/og": "^0.6.2",
+    "satori": "^0.10.14",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/node": "^20.14.0",
+    "tailwindcss": "^3.4.4",
+    "@tailwindcss/typography": "^0.5.13",
+    "postcss": "^8.4.38",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.0",
+    "tsx": "^4.15.7",
+    "wrangler": "^4.68.0"
+  }
+}

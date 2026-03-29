@@ -1,0 +1,35 @@
+# Cloudflare Pages cache headers
+# https://developers.cloudflare.com/pages/configuration/headers/
+
+# Next.js immutable static assets — cache 1 year
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Images — cache 7 days, allow revalidation
+/_next/image*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+
+# Fonts — cache 1 year
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# ads.txt — no cache (crawlers fetch often)
+/ads.txt
+  Cache-Control: no-cache
+
+# OG images — cache 1 day (ISR'd on server side)
+/api/og/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=3600
+
+# Sitemap + robots — cache 1 day
+/sitemap.xml
+  Cache-Control: public, max-age=86400
+/robots.txt
+  Cache-Control: public, max-age=86400
+
+# Default HTML pages — ISR handles freshness, allow short CDN cache
+/*
+  Cache-Control: public, max-age=0, must-revalidate
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
