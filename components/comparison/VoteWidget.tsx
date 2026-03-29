@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics";
 
+/* eslint-disable react/no-unescaped-entities */
+
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 interface VoteCounts {

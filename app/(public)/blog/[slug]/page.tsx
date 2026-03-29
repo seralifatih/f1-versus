@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { posts } from "../page";
 
+/* eslint-disable react/no-unescaped-entities */
+
 // ISR: revalidate daily
 export const revalidate = 86400;
 

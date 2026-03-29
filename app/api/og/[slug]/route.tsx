@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server";
 import { createServerClient } from "@/lib/supabase/client";
 import { parseComparisonSlug, getTeamColor, type Driver, type ComparisonResult } from "@/lib/data/types";
 
+/* eslint-disable @next/next/no-img-element */
+
 export const runtime = "edge";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
