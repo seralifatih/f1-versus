@@ -25,19 +25,26 @@ export function createBrowserClient() {
 // Reads cookies for session management (public anon access only in this app).
 
 export function createServerClient() {
-  const cookieStore = cookies();
+  const cookieStore = (() => {
+    try {
+      return cookies();
+    } catch {
+      return null;
+    }
+  })();
   type CookieSetInput = {
     name: string;
     value: string;
-    options?: Parameters<typeof cookieStore.set>[2];
+    options?: typeof cookieStore extends null ? undefined : Parameters<NonNullable<typeof cookieStore>["set"]>[2];
   };
 
   return createSupabaseServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
-        return cookieStore.getAll();
+        return cookieStore?.getAll() ?? [];
       },
       setAll(cookiesToSet: CookieSetInput[]) {
+        if (!cookieStore) return;
         try {
           cookiesToSet.forEach(({ name, value, options }: CookieSetInput) => {
             cookieStore.set(name, value, options);

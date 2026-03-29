@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { posts } from "../page";
+import { posts } from "../posts";
 
 /* eslint-disable react/no-unescaped-entities */
 

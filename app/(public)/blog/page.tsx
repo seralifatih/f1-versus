@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { posts, type Post } from "./posts";
 
 export const metadata: Metadata = {
   title: "Blog | GridRival",
@@ -11,40 +12,6 @@ export const metadata: Metadata = {
       "Data-driven analysis of Formula 1 history. Driver comparisons, historical rankings, and deep dives into F1 statistics.",
   },
 };
-
-// ─── Post registry ──────────────────────────────────────────────────────────
-// Add new posts here — they appear on the index page automatically.
-
-export const posts = [
-  {
-    slug: "best-f1-teammates-ranked-by-data",
-    title: "The All-Time Best F1 Teammates Ranked by Data",
-    date: "2025-07-01",
-    description:
-      "We pitted every legendary teammate pairing head-to-head — qualifying gap, race win ratio, and points delta — to settle the greatest intra-team battles in F1 history.",
-    tag: "Analysis",
-  },
-  {
-    slug: "wet-weather-kings-f1",
-    title: "Wet Weather Kings: Who Really Is the Best in Rain?",
-    date: "2025-07-01",
-    description:
-      "Wet races are where legends are made. We crunched positions-gained, win rates, and DNF avoidance across every rain-affected race since 1950 to crown the true wet-weather king.",
-    tag: "Deep Dive",
-  },
-  {
-    slug: "2026-regulations-driver-comparison",
-    title: "New Regs, New Era: How 2026 Drivers Compare So Far",
-    date: "2025-07-01",
-    description:
-      "The 2026 regulation reset reshuffled the grid. Here's what the early data says about who's adapting fastest — and which driver stats are already pulling ahead.",
-    tag: "2026 Season",
-  },
-] as const;
-
-type Post = (typeof posts)[number];
-
-// ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function BlogPage() {
   return (
@@ -81,10 +48,7 @@ function PostCard({ post }: { post: Post }) {
   });
 
   return (
-    <Link
-      href={`/blog/${post.slug}`}
-      style={{ textDecoration: "none" }}
-    >
+    <Link href={`/blog/${post.slug}`} style={{ textDecoration: "none" }}>
       <article
         style={{
           padding: 24,
@@ -122,9 +86,7 @@ function PostCard({ post }: { post: Post }) {
           >
             {post.tag}
           </span>
-          <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
-            {formattedDate}
-          </span>
+          <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>{formattedDate}</span>
         </div>
         <h2
           style={{
