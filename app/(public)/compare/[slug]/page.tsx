@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { createServerClient } from "@/lib/supabase/client";
+import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
 import { computeComparison } from "@/lib/comparison/compute";
 import {
   parseComparisonSlug,
@@ -32,6 +32,10 @@ export const revalidate = 86400;
 // Priority: current grid × current grid, then top historical pairs by win count.
 
 export async function generateStaticParams(): Promise<{ slug: string }[]> {
+  if (!hasPublicSupabaseConfig()) {
+    return [];
+  }
+
   const supabase = createServerClient();
   const currentYear = new Date().getFullYear();
 
@@ -91,6 +95,21 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const parsed = parseComparisonSlug(params.slug);
   if (!parsed) return { title: "Comparison Not Found" };
+
+  if (!hasPublicSupabaseConfig()) {
+    const fallbackNameA = parsed.driverARef.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const fallbackNameB = parsed.driverBRef.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const title = `${fallbackNameA} vs ${fallbackNameB} - F1 Driver Comparison | GridRival`;
+    const description = `Head-to-head F1 stats: ${fallbackNameA} vs ${fallbackNameB}. Wins, poles, podiums, consistency score, teammate battles, and more across every season of Formula 1.`;
+
+    return {
+      title,
+      description,
+      alternates: {
+        canonical: `/compare/${params.slug}`,
+      },
+    };
+  }
 
   const supabase = createServerClient();
 
@@ -639,6 +658,7 @@ export default async function ComparePage({
 }) {
   const parsed = parseComparisonSlug(params.slug);
   if (!parsed) notFound();
+  if (!hasPublicSupabaseConfig()) notFound();
 
   // Enforce canonical slug — redirect non-canonical ordering
   const canonical = buildComparisonSlug(parsed.driverARef, parsed.driverBRef);

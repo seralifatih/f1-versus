@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { createServerClient } from "@/lib/supabase/client";
+import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
 
 export const metadata: Metadata = {
   title: "F1 Driver Rankings — All-Time Stats",
@@ -29,6 +29,10 @@ interface RankedDriver {
 }
 
 async function getDriverRankings(): Promise<RankedDriver[]> {
+  if (!hasPublicSupabaseConfig()) {
+    return [];
+  }
+
   const supabase = createServerClient();
 
   // Aggregate stats from results and qualifying

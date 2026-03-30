@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { createServerClient } from "@/lib/supabase/client";
+import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
 import { createClient } from "@supabase/supabase-js";
 import { buildComparisonSlug } from "@/lib/data/types";
 import { DriverSearchBar } from "@/components/home/DriverSearchBar";
@@ -82,6 +82,10 @@ function getServiceClient() {
 }
 
 async function getTrendingComparisons(): Promise<TrendingComparison[]> {
+  if (!hasPublicSupabaseConfig()) {
+    return [];
+  }
+
   const supabase = getServiceClient(); // service role needed to read votes
   if (!supabase) {
     return getFallbackComparisons();
@@ -178,6 +182,10 @@ async function getTrendingComparisons(): Promise<TrendingComparison[]> {
 }
 
 async function getFallbackComparisons(): Promise<TrendingComparison[]> {
+  if (!hasPublicSupabaseConfig()) {
+    return [];
+  }
+
   const supabase = createServerClient();
   const { data } = await supabase
     .from("driver_comparisons")
@@ -212,6 +220,10 @@ async function getFallbackComparisons(): Promise<TrendingComparison[]> {
 }
 
 async function getDriversForSearch(): Promise<DriverSearchOption[]> {
+  if (!hasPublicSupabaseConfig()) {
+    return [];
+  }
+
   const supabase = createServerClient();
   const currentYear = new Date().getFullYear();
 
@@ -274,6 +286,10 @@ async function getDriversForSearch(): Promise<DriverSearchOption[]> {
 }
 
 async function getLatestRace(): Promise<LatestRace | null> {
+  if (!hasPublicSupabaseConfig()) {
+    return null;
+  }
+
   const supabase = createServerClient();
 
   const today = new Date().toISOString().slice(0, 10);
@@ -327,6 +343,10 @@ async function getLatestRace(): Promise<LatestRace | null> {
 }
 
 async function getSiteStats(): Promise<SiteStats> {
+  if (!hasPublicSupabaseConfig()) {
+    return { comparisons: 0, votes: 0, drivers: 0 };
+  }
+
   const supabase = createServerClient();
   const serviceClient = getServiceClient();
 

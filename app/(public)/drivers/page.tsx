@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { createServerClient } from "@/lib/supabase/client";
+import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
 import { DriverGrid } from "@/components/drivers/DriverGrid";
 
 export const metadata: Metadata = {
@@ -31,6 +31,10 @@ export interface DriverWithStats {
 // ─── Data fetching ─────────────────────────────────────────────────────────
 
 async function getDriversWithStats(): Promise<DriverWithStats[]> {
+  if (!hasPublicSupabaseConfig()) {
+    return [];
+  }
+
   const supabase = createServerClient();
 
   // Get current season year

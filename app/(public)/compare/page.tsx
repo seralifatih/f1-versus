@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { createServerClient } from "@/lib/supabase/client";
+import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
 
 export const metadata: Metadata = {
   title: "All F1 Driver Comparisons | GridRival",
@@ -28,6 +28,10 @@ interface ComparisonRow {
 // ─── Data ──────────────────────────────────────────────────────────────────
 
 async function getAllComparisons(): Promise<ComparisonRow[]> {
+  if (!hasPublicSupabaseConfig()) {
+    return [];
+  }
+
   const supabase = createServerClient();
   const currentYear = new Date().getFullYear();
 
