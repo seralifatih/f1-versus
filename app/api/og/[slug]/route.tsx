@@ -5,8 +5,6 @@ import { parseComparisonSlug, getTeamColor, type Driver, type ComparisonResult }
 
 /* eslint-disable @next/next/no-img-element */
 
-export const runtime = "edge";
-
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
