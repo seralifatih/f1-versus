@@ -8,5 +8,9 @@ keep_vars = true
 directory = ".open-next/assets"
 binding = "ASSETS"
 
+[[services]]
+binding = "WORKER_SELF_REFERENCE"
+service = "gridrival"
+
 [observability]
 enabled = true
