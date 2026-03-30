@@ -100,7 +100,7 @@ export async function generateMetadata({
   if (!hasPublicSupabaseConfig()) {
     const fallbackNameA = parsed.driverARef.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     const fallbackNameB = parsed.driverBRef.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    const title = `${fallbackNameA} vs ${fallbackNameB} - F1 Driver Comparison | GridRival`;
+    const title = `${fallbackNameA} vs ${fallbackNameB} - F1 Driver Comparison | F1-Versus`;
     const description = `Head-to-head F1 stats: ${fallbackNameA} vs ${fallbackNameB}. Wins, poles, podiums, consistency score, teammate battles, and more across every season of Formula 1.`;
 
     return {
@@ -137,7 +137,7 @@ export async function generateMetadata({
   const nameA = dA ? `${dA.first_name} ${dA.last_name}` : parsed.driverARef;
   const nameB = dB ? `${dB.first_name} ${dB.last_name}` : parsed.driverBRef;
 
-  const title = `${nameA} vs ${nameB} — F1 Driver Comparison | GridRival`;
+  const title = `${nameA} vs ${nameB} — F1 Driver Comparison | F1-Versus`;
 
   // Build a stats-specific description if we have pre-computed data
   let description: string;
@@ -155,7 +155,7 @@ export async function generateMetadata({
       s.headToHead.totalRaces > 0
         ? ` H2H: ${s.headToHead.driverAWins}–${s.headToHead.driverBWins} in ${s.headToHead.totalRaces} shared races.`
         : "";
-    description = `${winsLeader} leads ${winsMax}–${winsMin} on wins. ${nameA}: ${s.statsA.poles}P ${s.statsA.podiums}Pd | ${nameB}: ${s.statsB.poles}P ${s.statsB.podiums}Pd.${h2hLine} Full career stats on GridRival.`;
+    description = `${winsLeader} leads ${winsMax}–${winsMin} on wins. ${nameA}: ${s.statsA.poles}P ${s.statsA.podiums}Pd | ${nameB}: ${s.statsB.poles}P ${s.statsB.podiums}Pd.${h2hLine} Full career stats on F1-Versus.`;
   } else {
     description = `Head-to-head F1 stats: ${nameA} vs ${nameB}. Wins, poles, podiums, consistency score, teammate battles, and more across every season of Formula 1.`;
   }
@@ -629,7 +629,7 @@ function JsonLd({
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "GridRival", item: siteUrl },
+      { "@type": "ListItem", position: 1, name: "F1-Versus", item: siteUrl },
       { "@type": "ListItem", position: 2, name: "Compare", item: `${siteUrl}/compare` },
       { "@type": "ListItem", position: 3, name: `${nameA} vs ${nameB}`, item: pageUrl },
     ],
@@ -666,25 +666,41 @@ export default async function ComparePage({
     redirect(`/compare/${canonical}`);
   }
 
-  const [comparison, colors, circuitBreakdowns] = await Promise.all([
-    getOrComputeComparison(params.slug),
-    getTeamColors(parsed.driverARef, parsed.driverBRef),
-    getCircuitBreakdowns(parsed.driverARef, parsed.driverBRef),
-  ]);
-
+  const comparison = await getOrComputeComparison(params.slug);
   if (!comparison) notFound();
 
-  // Fetch AI summary + related comparisons in parallel
-  const [aiSummary, relatedComparisons] = await Promise.all([
-    getComparisonSummary(params.slug, comparison),
-    getRelatedComparisons(parsed.driverARef, parsed.driverBRef, params.slug),
-  ]);
-
   const { driverA, driverB, statsA, statsB, headToHead, radarMetrics, sharedSeasons } = comparison;
-  const { colorA, colorB } = colors;
-
   const nameA = `${driverA.first_name} ${driverA.last_name}`;
   const nameB = `${driverB.first_name} ${driverB.last_name}`;
+  const fallbackColorA = getTeamColor(driverA.driver_ref);
+  const fallbackColorB = getTeamColor(driverB.driver_ref);
+
+  const [colorsResult, circuitBreakdownsResult, aiSummaryResult, relatedComparisonsResult] =
+    await Promise.allSettled([
+      getTeamColors(parsed.driverARef, parsed.driverBRef),
+      getCircuitBreakdowns(parsed.driverARef, parsed.driverBRef),
+      getComparisonSummary(params.slug, comparison),
+      getRelatedComparisons(parsed.driverARef, parsed.driverBRef, params.slug),
+    ]);
+
+  const { colorA, colorB } =
+    colorsResult.status === "fulfilled"
+      ? colorsResult.value
+      : { colorA: fallbackColorA, colorB: fallbackColorB };
+
+  const circuitBreakdowns =
+    circuitBreakdownsResult.status === "fulfilled" ? circuitBreakdownsResult.value : [];
+
+  const aiSummary: AISummaryResult =
+    aiSummaryResult.status === "fulfilled"
+      ? aiSummaryResult.value
+      : {
+          text: `${nameA} and ${nameB} can still be compared below using the available career stats.`,
+          isAI: false,
+        };
+
+  const relatedComparisons =
+    relatedComparisonsResult.status === "fulfilled" ? relatedComparisonsResult.value : [];
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
