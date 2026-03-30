@@ -72,6 +72,8 @@ jobs:
           path: |
             .open-next/
             .next/
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 1
 
   deploy:
@@ -115,6 +117,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: open-next-build
+          path: .
 
       - name: Deploy to Cloudflare Workers
         if: steps.cloudflare.outputs.ready == 'true'
