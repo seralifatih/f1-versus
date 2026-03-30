@@ -57,12 +57,6 @@ function PostCard({ post }: { post: Post }) {
           borderRadius: 12,
           transition: "border-color 0.15s",
         }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
-        }}
       >
         <div
           style={{

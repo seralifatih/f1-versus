@@ -70,15 +70,22 @@ const POPULAR_MATCHUPS = [
 // ─── Data fetchers ─────────────────────────────────────────────────────────
 
 function getServiceClient() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null;
+  }
+
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 }
 
 async function getTrendingComparisons(): Promise<TrendingComparison[]> {
   const supabase = getServiceClient(); // service role needed to read votes
+  if (!supabase) {
+    return getFallbackComparisons();
+  }
 
   const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -325,7 +332,7 @@ async function getSiteStats(): Promise<SiteStats> {
 
   const [
     { count: comparisons },
-    { count: votes },
+    votesResult,
     { count: drivers },
   ] = await Promise.all([
     supabase
@@ -333,8 +340,8 @@ async function getSiteStats(): Promise<SiteStats> {
       .select("id", { count: "exact", head: true })
       .is("season", null),
     serviceClient
-      .from("votes")
-      .select("id", { count: "exact", head: true }),
+      ? serviceClient.from("votes").select("id", { count: "exact", head: true })
+      : Promise.resolve({ count: 0 }),
     supabase
       .from("drivers")
       .select("id", { count: "exact", head: true }),
@@ -342,7 +349,7 @@ async function getSiteStats(): Promise<SiteStats> {
 
   return {
     comparisons: comparisons ?? 0,
-    votes: votes ?? 0,
+    votes: votesResult.count ?? 0,
     drivers: drivers ?? 0,
   };
 }
