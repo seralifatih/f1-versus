@@ -3,20 +3,28 @@ import { createServerClient as createSupabaseServerClient } from "@supabase/ssr"
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+function getPublicSupabaseConfig() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables."
-  );
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables."
+    );
+  }
+
+  return { supabaseUrl, supabaseAnonKey };
+}
+
+export function hasPublicSupabaseConfig() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
 // ─── Browser Client ────────────────────────────────────────────────────────
 // Use in Client Components ("use client") only.
 
 export function createBrowserClient() {
+  const { supabaseUrl, supabaseAnonKey } = getPublicSupabaseConfig();
   return createSupabaseBrowserClient(supabaseUrl, supabaseAnonKey);
 }
 
@@ -25,6 +33,7 @@ export function createBrowserClient() {
 // Reads cookies for session management (public anon access only in this app).
 
 export function createServerClient() {
+  const { supabaseUrl, supabaseAnonKey } = getPublicSupabaseConfig();
   const cookieStore = (() => {
     try {
       return cookies();
@@ -63,6 +72,8 @@ export function createServerClient() {
 // Bypasses RLS — never expose to the browser.
 
 export function createServiceRoleClient() {
+  const { supabaseUrl } = getPublicSupabaseConfig();
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseServiceRoleKey) {
     throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY environment variable.");
   }
