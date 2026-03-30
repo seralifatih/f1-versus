@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
+import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
 // Viewport: responsive scaling + allow pinch-to-zoom (accessibility best practice)
@@ -16,9 +17,7 @@ export const metadata: Metadata = {
   },
   description:
     "Head-to-head Formula 1 driver comparisons. Stats, charts, and analysis for every driver pairing in F1 history.",
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://gridrival.com"
-  ),
+  metadataBase: new URL(getSiteUrl()),
   openGraph: {
     type: "website",
     siteName: "GridRival",

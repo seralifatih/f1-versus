@@ -21,6 +21,7 @@ import { CircuitBreakdown } from "@/components/comparison/CircuitBreakdown";
 import { getComparisonSummary, type AISummaryResult } from "@/lib/ai/summary";
 import { AdBanner } from "@/components/ui/AdBanner";
 import { ComparisonViewTracker } from "@/components/comparison/ComparisonViewTracker";
+import { getSiteUrl } from "@/lib/site-url";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -574,8 +575,7 @@ function JsonLd({
   statsB: { wins: number; poles: number; podiums: number; totalRaces: number };
   headToHead: { totalRaces: number; driverAWins: number; driverBWins: number };
 }) {
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://gridrival.com";
+  const siteUrl = getSiteUrl();
   const pageUrl = `${siteUrl}/compare/${slug}`;
 
   const winsLeader = statsA.wins >= statsB.wins ? nameA : nameB;

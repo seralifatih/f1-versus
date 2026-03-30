@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
 import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
+import { getSiteUrl } from "@/lib/site-url";
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://gridrival.com";
+const BASE_URL = getSiteUrl();
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
