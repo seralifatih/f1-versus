@@ -93,10 +93,12 @@ function SiteHeader() {
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <a
           href="/"
-          className="flex items-center gap-2 font-bold text-xl tracking-tight"
+          className="flex items-center gap-0 font-black tracking-tight"
           aria-label="F1-Versus home"
+          style={{ fontSize: "clamp(1.5rem, 2.2vw, 2rem)", letterSpacing: "-0.04em" }}
         >
-          <span>F1-Versus</span>
+          <span style={{ color: "var(--accent)" }}>F1</span>
+          <span style={{ color: "#fff" }}>-Versus</span>
         </a>
         <nav aria-label="Main navigation">
           <ul className="flex items-center gap-1 text-sm font-medium">
