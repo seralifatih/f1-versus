@@ -96,8 +96,7 @@ function SiteHeader() {
           className="flex items-center gap-2 font-bold text-xl tracking-tight"
           aria-label="F1-Versus home"
         >
-          <span style={{ color: "var(--accent)" }}>Grid</span>
-          <span>Rival</span>
+          <span>F1-Versus</span>
         </a>
         <nav aria-label="Main navigation">
           <ul className="flex items-center gap-1 text-sm font-medium">
