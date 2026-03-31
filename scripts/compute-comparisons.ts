@@ -47,6 +47,14 @@ function error(message: string, err?: unknown): void {
   console.error(`[${new Date().toISOString()}] ✖ ${message}`, err ?? "");
 }
 
+function chunkArray<T>(items: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    chunks.push(items.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
 // ─── Driver selection ──────────────────────────────────────────────────────
 
 async function getDriversToCompute(): Promise<Driver[]> {
@@ -107,13 +115,21 @@ async function getDriversToCompute(): Promise<Driver[]> {
     from += pageSize;
   }
 
-  const { data, error: err } = await supabase
-    .from("drivers")
-    .select("id, driver_ref, first_name, last_name, dob, nationality, headshot_url")
-    .in("id", [...uniqueIds])
-    .order("last_name");
-  if (err) throw err;
-  return (data ?? []) as Driver[];
+  const drivers: Driver[] = [];
+  const idChunks = chunkArray([...uniqueIds], 200);
+
+  for (const idChunk of idChunks) {
+    const { data, error: err } = await supabase
+      .from("drivers")
+      .select("id, driver_ref, first_name, last_name, dob, nationality, headshot_url")
+      .in("id", idChunk);
+
+    if (err) throw err;
+    drivers.push(...((data ?? []) as Driver[]));
+  }
+
+  drivers.sort((a, b) => a.last_name.localeCompare(b.last_name));
+  return drivers;
 }
 
 // ─── Pair generation ───────────────────────────────────────────────────────
