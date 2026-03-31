@@ -260,6 +260,7 @@ async function syncSeason(year: number): Promise<void> {
 
   const races = await fetchRacesByYear(year);
   log(`  Found ${races.length} races`);
+  const today = new Date().toISOString().slice(0, 10);
 
   for (const race of races) {
     const round = parseInt(race.round, 10);
@@ -277,6 +278,11 @@ async function syncSeason(year: number): Promise<void> {
     const raceId = await upsertRace(race, circuitId);
     if (!raceId) {
       warn(`  Could not get race ID for ${year}/${round}, skipping`);
+      continue;
+    }
+
+    if (race.date && race.date > today) {
+      log(`    Scheduled for ${race.date}; skipping result import until race weekend is complete`);
       continue;
     }
 

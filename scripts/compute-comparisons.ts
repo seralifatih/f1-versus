@@ -86,17 +86,31 @@ async function getDriversToCompute(): Promise<Driver[]> {
   }
 
   // All drivers who have at least one race result
-  const { data: raceDriverIds } = await supabase
-    .from("results")
-    .select("driver_id")
-    .limit(100000);
+  const uniqueIds = new Set<string>();
+  let from = 0;
+  const pageSize = 1000;
 
-  const uniqueIds = [...new Set((raceDriverIds ?? []).map((r) => r.driver_id))];
+  while (true) {
+    const { data: raceDriverIds, error: resultsError } = await supabase
+      .from("results")
+      .select("driver_id")
+      .range(from, from + pageSize - 1);
+
+    if (resultsError) throw resultsError;
+    if (!raceDriverIds || raceDriverIds.length === 0) break;
+
+    for (const row of raceDriverIds) {
+      uniqueIds.add(row.driver_id);
+    }
+
+    if (raceDriverIds.length < pageSize) break;
+    from += pageSize;
+  }
 
   const { data, error: err } = await supabase
     .from("drivers")
     .select("id, driver_ref, first_name, last_name, dob, nationality, headshot_url")
-    .in("id", uniqueIds)
+    .in("id", [...uniqueIds])
     .order("last_name");
   if (err) throw err;
   return (data ?? []) as Driver[];
