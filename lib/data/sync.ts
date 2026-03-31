@@ -1,7 +1,7 @@
 /**
  * Jolpica API fetch utilities with rate limiting.
  *
- * Rate limit: 200 req/hr → max ~3.33 req/min → 18s minimum between requests.
+ * Rate limit: 200 req/hr -> max ~3.33 req/min -> 18s minimum between requests.
  * We use a conservative 20s delay queue.
  *
  * CLI usage (either entry point works):
@@ -23,8 +23,10 @@ import type {
 const BASE_URL = "http://api.jolpi.ca/ergast/f1";
 const RATE_LIMIT_DELAY_MS = 20_000; // 20 seconds between requests
 const DEFAULT_LIMIT = 1000;
-
-// ─── Rate Limiting ─────────────────────────────────────────────────────────
+const MAX_RETRIES = 3;
+const MAX_429_RETRY_DELAY_MS = 5 * 60_000;
+const MAX_TRANSIENT_RETRY_DELAY_MS = 30_000;
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 let lastRequestTime = 0;
 
@@ -42,33 +44,83 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ─── Core Fetch ───────────────────────────────────────────────────────────
+function parseRetryAfterMs(headerValue: string | null): number | null {
+  if (!headerValue) return null;
+
+  const retryAfterSeconds = Number(headerValue);
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+    return retryAfterSeconds * 1000;
+  }
+
+  const retryAfterDate = Date.parse(headerValue);
+  if (Number.isNaN(retryAfterDate)) return null;
+
+  return Math.max(retryAfterDate - Date.now(), 0);
+}
+
+function getRetryDelayMs(status: number | null, attempt: number, retryAfterMs: number | null): number {
+  if (retryAfterMs !== null) {
+    return retryAfterMs;
+  }
+
+  if (status === 429) {
+    return Math.min(60_000 * attempt, MAX_429_RETRY_DELAY_MS);
+  }
+
+  return Math.min(5_000 * 2 ** (attempt - 1), MAX_TRANSIENT_RETRY_DELAY_MS);
+}
 
 async function jolpicaFetch<T>(
   path: string,
   params: Record<string, string | number> = {}
 ): Promise<JolpicaResponse<T>> {
-  await rateLimit();
-
   const url = new URL(`${BASE_URL}${path}.json`);
   url.searchParams.set("limit", String(params.limit ?? DEFAULT_LIMIT));
   if (params.offset) {
     url.searchParams.set("offset", String(params.offset));
   }
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      "User-Agent": "GridRival/1.0 (gridrival.com)",
-    },
-    // No Next.js cache — these are only used in scripts, not SSR
-    cache: "no-store",
-  });
+  for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt += 1) {
+    await rateLimit();
 
-  if (!res.ok) {
-    throw new Error(`Jolpica API error ${res.status}: ${url.toString()}`);
+    let res: Response;
+    try {
+      res = await fetch(url.toString(), {
+        headers: {
+          "User-Agent": "F1-Versus/1.0 (f1-versus.com)",
+        },
+        cache: "no-store",
+      });
+    } catch (error) {
+      if (attempt > MAX_RETRIES) {
+        throw error;
+      }
+
+      const delayMs = getRetryDelayMs(null, attempt, null);
+      console.warn(
+        `[Jolpica] Network error: ${url.toString()}; retrying in ${Math.ceil(delayMs / 1000)}s (${attempt}/${MAX_RETRIES})`
+      );
+      await sleep(delayMs);
+      continue;
+    }
+
+    if (res.ok) {
+      return res.json() as Promise<JolpicaResponse<T>>;
+    }
+
+    if (!RETRYABLE_STATUSES.has(res.status) || attempt > MAX_RETRIES) {
+      throw new Error(`Jolpica API error ${res.status}: ${url.toString()}`);
+    }
+
+    const retryAfterMs = parseRetryAfterMs(res.headers.get("retry-after"));
+    const delayMs = getRetryDelayMs(res.status, attempt, retryAfterMs);
+    console.warn(
+      `[Jolpica] HTTP ${res.status}: ${url.toString()}; retrying in ${Math.ceil(delayMs / 1000)}s (${attempt}/${MAX_RETRIES})`
+    );
+    await sleep(delayMs);
   }
 
-  return res.json() as Promise<JolpicaResponse<T>>;
+  throw new Error(`Jolpica API error: exhausted retries for ${url.toString()}`);
 }
 
 /**
@@ -82,20 +134,18 @@ async function fetchAllPages<T>(
   const firstPage = await jolpicaFetch<T>(path, { limit: DEFAULT_LIMIT, offset: 0 });
   const total = parseInt(firstPage.MRData.total, 10);
   const items = extractList(firstPage.MRData);
+  const pageSize = parseInt(firstPage.MRData.limit, 10) || items.length || DEFAULT_LIMIT;
 
-  if (total <= DEFAULT_LIMIT) return items;
+  if (total <= items.length) return items;
 
-  // Fetch remaining pages
   const remaining: T[] = [];
-  for (let offset = DEFAULT_LIMIT; offset < total; offset += DEFAULT_LIMIT) {
-    const page = await jolpicaFetch<T>(path, { limit: DEFAULT_LIMIT, offset });
+  for (let offset = pageSize; offset < total; offset += pageSize) {
+    const page = await jolpicaFetch<T>(path, { limit: pageSize, offset });
     remaining.push(...extractList(page.MRData));
   }
 
   return [...items, ...remaining];
 }
-
-// ─── Public API Functions ──────────────────────────────────────────────────
 
 /**
  * Fetch all available F1 seasons.
@@ -150,7 +200,6 @@ export async function fetchSprintByRace(
     const race = data.MRData.RaceTable?.Races?.[0];
     return race?.SprintResults ?? [];
   } catch {
-    // Sprint endpoint returns 404 for non-sprint weekends; treat as empty
     return [];
   }
 }
@@ -159,10 +208,7 @@ export async function fetchSprintByRace(
  * Fetch all drivers in Jolpica's database.
  */
 export async function fetchDrivers(): Promise<JolpicaDriver[]> {
-  return fetchAllPages<JolpicaDriver>(
-    "/drivers",
-    (mrdata) => mrdata.DriverTable?.Drivers ?? []
-  );
+  return fetchAllPages<JolpicaDriver>("/drivers", (mrdata) => mrdata.DriverTable?.Drivers ?? []);
 }
 
 /**
@@ -191,10 +237,8 @@ export async function fetchConstructorsBySeason(year: number): Promise<JolpicaCo
   return data.MRData.ConstructorTable?.Constructors ?? [];
 }
 
-// ─── Data Transformation ──────────────────────────────────────────────────
-
 /**
- * Team color lookup — a best-effort static map for known constructors.
+ * Team color lookup - a best-effort static map for known constructors.
  * The authoritative source is the `constructors.color_hex` column in Supabase.
  * This is used as a fallback during initial seeding.
  */
@@ -209,7 +253,6 @@ export const CONSTRUCTOR_COLORS: Record<string, string> = {
   rb: "#6692FF",
   kick_sauber: "#52E252",
   haas: "#B6BABD",
-  // Historical
   renault: "#FFE900",
   lotus_f1: "#FFB800",
   force_india: "#FF80C7",
@@ -239,4 +282,3 @@ export const CONSTRUCTOR_COLORS: Record<string, string> = {
   brabham: "#006633",
   matra: "#0055AA",
 };
-

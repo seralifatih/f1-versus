@@ -242,7 +242,7 @@ function BestTeammates() {
 
       <H2>See It For Yourself</H2>
       <P>
-        Every pairing in this article has a full GridRival comparison page — qualifying round-by-round, season timeline, circuit breakdown, and fan vote. Click through and settle the debate yourself.
+        Every pairing in this article has a full F1-Versus comparison page — qualifying round-by-round, season timeline, circuit breakdown, and fan vote. Click through and settle the debate yourself.
       </P>
     </>
   );
@@ -351,7 +351,7 @@ function NewRegs2026() {
 
       <H2>Compare Them Yourself</H2>
       <P>
-        GridRival updates comparison data after every race weekend. The 2026 season-specific stats will be live by round 3. Head to the compare page and pit any 2026 driver against another — the numbers update live.
+        F1-Versus updates comparison data after every race weekend. The 2026 season-specific stats will be live by round 3. Head to the compare page and pit any 2026 driver against another — the numbers update live.
       </P>
     </>
   );

@@ -1,5 +1,5 @@
 -- ============================================================
--- GridRival — Seed Constructor Colors
+-- F1-Versus — Seed Constructor Colors
 -- Base team colors for the 2024/2025 grid + recent history
 -- ============================================================
 

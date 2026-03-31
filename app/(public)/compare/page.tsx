@@ -3,9 +3,9 @@ import Link from "next/link";
 import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
 
 export const metadata: Metadata = {
-  title: "All F1 Driver Comparisons | GridRival",
+  title: "All F1 Driver Comparisons | F1-Versus",
   description:
-    "Browse every head-to-head Formula 1 driver comparison on GridRival — from Hamilton vs Verstappen to Senna vs Prost. All eras, all rivalries.",
+    "Browse every head-to-head Formula 1 driver comparison on F1-Versus — from Hamilton vs Verstappen to Senna vs Prost. All eras, all rivalries.",
   alternates: { canonical: "/compare" },
 };
 
@@ -117,7 +117,7 @@ export default async function CompareHubPage() {
     <div style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 16px 80px" }}>
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" style={{ marginBottom: 24, fontSize: 13, color: "#555" }}>
-        <Link href="/" style={{ color: "#555", textDecoration: "none" }}>GridRival</Link>
+        <Link href="/" style={{ color: "#555", textDecoration: "none" }}>F1-Versus</Link>
         <span style={{ margin: "0 8px" }}>›</span>
         <span style={{ color: "#888" }}>Compare</span>
       </nav>

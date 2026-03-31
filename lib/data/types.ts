@@ -107,6 +107,8 @@ export interface DriverStats {
   avgGridPosition: number;
   /** Average positions gained from grid to finish (positive = gained) */
   avgPositionsGained: number;
+  /** % of races where driver finished higher than they started (0–1) */
+  positionsGainedRate: number;
   /**
    * Consistency score derived from finish-position standard deviation.
    * Higher is better; 1 means very consistent, 0 means highly variable.

@@ -245,7 +245,7 @@ export async function GET(
           }}
         />
 
-        {/* GridRival logo — top center */}
+        {/* F1-Versus logo — top center */}
         <div
           style={{
             position: "absolute",
@@ -586,10 +586,10 @@ export async function GET(
           }}
         >
           <span style={{ fontSize: "12px", color: "#333" }}>
-            gridrival.com
+            f1-versus.com
           </span>
           <span style={{ fontSize: "12px", color: "#333" }}>
-            gridrival.com/compare/{slug}
+            f1-versus.com/compare/{slug}
           </span>
         </div>
       </div>

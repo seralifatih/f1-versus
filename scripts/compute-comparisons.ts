@@ -156,7 +156,7 @@ async function upsertComparison(
 // ─── Main ──────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  log("GridRival comparison computation starting...");
+  log("F1-Versus comparison computation starting...");
   log(
     `Mode: ${
       driverArgs.length > 0

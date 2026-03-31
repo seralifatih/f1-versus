@@ -8,7 +8,7 @@ import { DriverSearchBar } from "@/components/home/DriverSearchBar";
 import { AdBanner } from "@/components/ui/AdBanner";
 
 export const metadata: Metadata = {
-  title: "GridRival — Settle F1 Arguments with Data",
+  title: "F1-Versus — Settle F1 Arguments with Data",
   description:
     "Head-to-head Formula 1 driver comparisons powered by real race data. Wins, poles, podiums, consistency — settle the debate with stats.",
 };

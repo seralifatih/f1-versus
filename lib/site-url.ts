@@ -1,4 +1,4 @@
-const DEFAULT_SITE_URL = "https://gridrival.com";
+const DEFAULT_SITE_URL = "https://f1-versus.com";
 
 export function getSiteUrl() {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();

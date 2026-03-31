@@ -16,12 +16,12 @@ export function ShareButton({ slug, nameA, nameB }: ShareButtonProps) {
   const pageUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/compare/${slug}`
-      : `https://gridrival.com/compare/${slug}`;
+      : `https://f1-versus.com/compare/${slug}`;
 
   const ogImageUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/api/og/${slug}`
-      : `https://gridrival.com/api/og/${slug}`;
+      : `https://f1-versus.com/api/og/${slug}`;
 
   const handleCopy = async () => {
     trackEvent("share_clicked", { slug, method: "copy_link" });
@@ -237,7 +237,7 @@ function NativeShareButton({
     trackEvent("share_clicked", { slug, method: "native" });
     try {
       await navigator.share({
-        title: `${nameA} vs ${nameB} | GridRival`,
+        title: `${nameA} vs ${nameB} | F1-Versus`,
         text: `${nameA} vs ${nameB} — settled by data 🏎️`,
         url: pageUrl,
       });

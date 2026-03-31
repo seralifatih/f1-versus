@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Changelog | GridRival",
-  description: "What's new on GridRival — feature updates, data improvements, and bug fixes.",
+  title: "Changelog | F1-Versus",
+  description: "What's new on F1-Versus — feature updates, data improvements, and bug fixes.",
 };
 
 // ─── Changelog data ─────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ export default function ChangelogPage() {
         Changelog
       </h1>
       <p style={{ color: "var(--muted-foreground)", fontSize: 15, marginBottom: 48 }}>
-        Updates, improvements, and fixes to GridRival.
+        Updates, improvements, and fixes to F1-Versus.
       </p>
 
       {/* Entries */}
@@ -177,7 +177,7 @@ export default function ChangelogPage() {
           Found a bug or have a feature request?
         </p>
         <a
-          href="https://github.com/noktastudio/gridrival/issues"
+          href="https://github.com/noktastudio/f1-versus/issues"
           target="_blank"
           rel="noopener noreferrer"
           style={{

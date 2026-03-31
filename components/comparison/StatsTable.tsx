@@ -194,6 +194,8 @@ export function StatsTable({
     { label: "Championships",  a: champA,                          b: champB },
     { label: "Races Started",  a: statsA.totalRaces,               b: statsB.totalRaces },
     { label: "Points",         a: Math.round(statsA.totalPoints),  b: Math.round(statsB.totalPoints) },
+    { label: "Avg Pos. Gained", a: Math.round(statsA.avgPositionsGained * 10) / 10, b: Math.round(statsB.avgPositionsGained * 10) / 10 },
+    { label: "Gain Rate",      a: Math.round((statsA.positionsGainedRate ?? 0) * 100), b: Math.round((statsB.positionsGainedRate ?? 0) * 100), suffix: "%" },
     { label: "DNFs",           a: statsA.dnfs,                     b: statsB.dnfs, lowerIsBetter: true },
   ];
 

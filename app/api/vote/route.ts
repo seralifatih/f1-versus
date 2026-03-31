@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
 import { parseComparisonSlug } from "@/lib/data/types";
 
-const DEV_VOTE_IP_HASH_SECRET = "gridrival-dev-only-secret";
+const DEV_VOTE_IP_HASH_SECRET = "f1-versus-dev-only-secret";
 let hasWarnedAboutVoteSecret = false;
 
 // ─── GET /api/vote?slug=verstappen-vs-hamilton ─────────────────────────────

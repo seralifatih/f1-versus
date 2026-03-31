@@ -1,5 +1,5 @@
 -- ============================================================
--- GridRival — Initial Schema Migration
+-- F1-Versus — Initial Schema Migration
 -- ============================================================
 
 -- Enable UUID extension

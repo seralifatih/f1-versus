@@ -11,10 +11,9 @@ import {
   type CircuitBreakdownRow,
   type CircuitBreakdownStats,
 } from "@/lib/data/types";
-import { DriverRadarChart } from "@/components/charts/DriverRadarChart";
 import { SeasonTimeline } from "@/components/charts/SeasonTimeline";
-import { StatsTable } from "@/components/comparison/StatsTable";
 import { TeammateBattle } from "@/components/comparison/TeammateBattle";
+import { FilterableComparison } from "@/components/comparison/FilterableComparison";
 import { ShareButton } from "@/components/comparison/ShareButton";
 import { VoteWidget } from "@/components/comparison/VoteWidget";
 import { CircuitBreakdown } from "@/components/comparison/CircuitBreakdown";
@@ -736,30 +735,17 @@ export default async function ComparePage({
         aiSummary={aiSummary}
       />
 
-      {/* ── 3. Stats Table ─────────────────────────────────────────────── */}
-      <section className="mb-10">
-        <SectionTitle>Career Statistics</SectionTitle>
-        <StatsTable
-          nameA={driverA.last_name}
-          nameB={driverB.last_name}
-          statsA={statsA}
-          statsB={statsB}
-          colorA={colorA}
-          colorB={colorB}
-        />
-      </section>
-
-      {/* ── 4. Radar Chart ─────────────────────────────────────────────── */}
-      <section className="mb-10">
-        <SectionTitle>Performance Profile</SectionTitle>
-        <DriverRadarChart
-          metrics={radarMetrics}
-          nameA={driverA.last_name}
-          nameB={driverB.last_name}
-          colorA={colorA}
-          colorB={colorB}
-        />
-      </section>
+      {/* ── 3 & 4. Stats Table + Radar Chart (with context filters) ──── */}
+      <FilterableComparison
+        defaultResult={comparison}
+        driverARef={parsed.driverARef}
+        driverBRef={parsed.driverBRef}
+        nameA={driverA.last_name}
+        nameB={driverB.last_name}
+        colorA={colorA}
+        colorB={colorB}
+        sharedSeasons={sharedSeasons}
+      />
 
       {/* ── Ad: Medium Rectangle (300×250) ────────────────────────────── */}
       <div className="mb-10 flex justify-center">

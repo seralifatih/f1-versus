@@ -3,7 +3,7 @@ import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/clie
 import { DriverGrid } from "@/components/drivers/DriverGrid";
 
 export const metadata: Metadata = {
-  title: "F1 Drivers — Browse & Compare All Drivers | GridRival",
+  title: "F1 Drivers — Browse & Compare All Drivers | F1-Versus",
   description:
     "Browse all Formula 1 drivers. Select any two to generate a head-to-head comparison with career stats, radar charts, and teammate records.",
 };

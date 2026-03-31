@@ -3,11 +3,11 @@ import Link from "next/link";
 import { posts, type Post } from "./posts";
 
 export const metadata: Metadata = {
-  title: "Blog | GridRival",
+  title: "Blog | F1-Versus",
   description:
     "Data-driven analysis of Formula 1 history. Driver comparisons, historical rankings, and deep dives into F1 statistics.",
   openGraph: {
-    title: "GridRival Blog",
+    title: "F1-Versus Blog",
     description:
       "Data-driven analysis of Formula 1 history. Driver comparisons, historical rankings, and deep dives into F1 statistics.",
   },

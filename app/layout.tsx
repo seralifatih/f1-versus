@@ -12,20 +12,20 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "GridRival — F1 Driver Comparison Engine",
-    template: "%s | GridRival",
+    default: "F1-Versus — F1 Driver Comparison Engine",
+    template: "%s | F1-Versus",
   },
   description:
     "Head-to-head Formula 1 driver comparisons. Stats, charts, and analysis for every driver pairing in F1 history.",
   metadataBase: new URL(getSiteUrl()),
   openGraph: {
     type: "website",
-    siteName: "GridRival",
+    siteName: "F1-Versus",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    site: "@gridrival",
+    site: "@f1-versus",
   },
   robots: {
     index: true,
@@ -94,7 +94,7 @@ function SiteHeader() {
         <a
           href="/"
           className="flex items-center gap-2 font-bold text-xl tracking-tight"
-          aria-label="GridRival home"
+          aria-label="F1-Versus home"
         >
           <span style={{ color: "var(--accent)" }}>Grid</span>
           <span>Rival</span>
@@ -144,7 +144,7 @@ function SiteFooter() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
           <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-            © {new Date().getFullYear()} GridRival by Nokta Studio. F1 data via{" "}
+            © {new Date().getFullYear()} F1-Versus by Nokta Studio. F1 data via{" "}
             <a
               href="https://api.jolpi.ca/ergast/f1/"
               target="_blank"
@@ -164,7 +164,7 @@ function SiteFooter() {
               Changelog
             </a>
             <a
-              href="https://github.com/noktastudio/gridrival/issues"
+              href="https://github.com/noktastudio/f1-versus/issues"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs hover:text-white transition-colors"

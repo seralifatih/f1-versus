@@ -18,7 +18,9 @@ import {
   fetchQualifyingByRace,
   fetchSprintByRace,
   fetchDrivers,
+  fetchDriversBySeason,
   fetchConstructors,
+  fetchConstructorsBySeason,
   CONSTRUCTOR_COLORS,
 } from "../lib/data/sync";
 import {
@@ -43,6 +45,7 @@ const args = process.argv.slice(2);
 const isIncremental = args.includes("--incremental");
 const seasonArg = args.find((a) => a.startsWith("--season="));
 const forceSeason = seasonArg ? parseInt(seasonArg.split("=")[1], 10) : null;
+const failedEndpoints: string[] = [];
 
 // ─── Logger ────────────────────────────────────────────────────────────────
 
@@ -77,12 +80,13 @@ async function upsertDriver(driver: JolpicaDriver): Promise<void> {
 
 async function upsertConstructor(constructor: JolpicaConstructor): Promise<void> {
   const colorHex = CONSTRUCTOR_COLORS[constructor.constructorId] ?? null;
+  const payload = {
+    constructor_ref: constructor.constructorId,
+    name: constructor.name,
+    ...(colorHex ? { color_hex: colorHex } : {}),
+  };
   const { error: err } = await supabase.from("constructors").upsert(
-    {
-      constructor_ref: constructor.constructorId,
-      name: constructor.name,
-      color_hex: colorHex,
-    },
+    payload,
     { onConflict: "constructor_ref", ignoreDuplicates: false }
   );
   if (err) warn(`Failed to upsert constructor ${constructor.constructorId}: ${err.message}`);
@@ -90,15 +94,15 @@ async function upsertConstructor(constructor: JolpicaConstructor): Promise<void>
 
 async function upsertCircuit(race: JolpicaRace): Promise<void> {
   const c = race.Circuit;
+  const payload = {
+    circuit_ref: c.circuitId,
+    name: c.circuitName,
+    country: c.Location.country,
+    lat: parseFloat(c.Location.lat),
+    lng: parseFloat(c.Location.long),
+  };
   const { error: err } = await supabase.from("circuits").upsert(
-    {
-      circuit_ref: c.circuitId,
-      name: c.circuitName,
-      country: c.Location.country,
-      lat: parseFloat(c.Location.lat),
-      lng: parseFloat(c.Location.long),
-      type: null, // Street/permanent classification added manually or via supplementary data
-    },
+    payload,
     { onConflict: "circuit_ref", ignoreDuplicates: false }
   );
   if (err) warn(`Failed to upsert circuit ${c.circuitId}: ${err.message}`);
@@ -233,16 +237,18 @@ async function upsertQualifying(
 
 // ─── Sync functions ────────────────────────────────────────────────────────
 
-async function syncDriversAndConstructors(): Promise<void> {
+async function syncDriversAndConstructors(season?: number): Promise<void> {
   log("Syncing drivers...");
-  const drivers = await fetchDrivers();
+  const drivers = season ? await fetchDriversBySeason(season) : await fetchDrivers();
   log(`  Found ${drivers.length} drivers`);
   for (const driver of drivers) {
     await upsertDriver(driver);
   }
 
   log("Syncing constructors...");
-  const constructors = await fetchConstructors();
+  const constructors = season
+    ? await fetchConstructorsBySeason(season)
+    : await fetchConstructors();
   log(`  Found ${constructors.length} constructors`);
   for (const constructor of constructors) {
     await upsertConstructor(constructor);
@@ -282,6 +288,7 @@ async function syncSeason(year: number): Promise<void> {
         await upsertResult(raceId, result);
       }
     } catch (err) {
+      failedEndpoints.push(`${year}/${round} results`);
       warn(`    Failed to fetch results for ${year}/${round}: ${String(err)}`);
     }
 
@@ -293,6 +300,7 @@ async function syncSeason(year: number): Promise<void> {
         await upsertQualifying(raceId, q);
       }
     } catch (err) {
+      failedEndpoints.push(`${year}/${round} qualifying`);
       warn(`    Failed to fetch qualifying for ${year}/${round}: ${String(err)}`);
     }
 
@@ -310,7 +318,7 @@ async function syncSeason(year: number): Promise<void> {
 // ─── Main ──────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  log("GridRival data sync starting...");
+  log("F1-Versus data sync starting...");
   log(`Mode: ${forceSeason ? `season ${forceSeason}` : isIncremental ? "incremental (current season)" : "full sync"}`);
 
   // Validate environment
@@ -322,16 +330,15 @@ async function main(): Promise<void> {
   const startTime = Date.now();
 
   try {
-    // Always sync drivers and constructors first
-    await syncDriversAndConstructors();
-
     let seasonsToSync: number[];
 
     if (forceSeason) {
       seasonsToSync = [forceSeason];
     } else if (isIncremental) {
-      const currentYear = new Date().getFullYear();
-      seasonsToSync = [currentYear];
+      const availableSeasons = await fetchSeasons();
+      const latestSeason = Math.max(...availableSeasons);
+      seasonsToSync = [latestSeason];
+      log(`Latest available Jolpica season: ${latestSeason}`);
     } else {
       // Full sync: all seasons from 1950 to current
       log("\nFetching all seasons from Jolpica...");
@@ -339,8 +346,22 @@ async function main(): Promise<void> {
       log(`Found ${seasonsToSync.length} seasons to sync`);
     }
 
+    // For incremental/single-season runs, only seed the current season's roster first.
+    // For full sync, seed the full historical driver/constructor list once.
+    await syncDriversAndConstructors(
+      forceSeason || isIncremental ? seasonsToSync[0] : undefined
+    );
+
     for (const season of seasonsToSync) {
       await syncSeason(season);
+    }
+
+    if (failedEndpoints.length > 0) {
+      log("\nIncomplete endpoints detected:");
+      for (const endpoint of failedEndpoints) {
+        warn(`  ${endpoint}`);
+      }
+      log("Rerun the affected seasons sequentially after the other sync processes have stopped.");
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);

@@ -522,6 +522,12 @@ function computeDriverStats(
         positionChangeData.length
       : 0;
 
+  // Rate of races where driver gained positions (finished higher than started)
+  const positionsGainedRate =
+    positionChangeData.length > 0
+      ? positionChangeData.filter((r) => r.position! < r.grid!).length / positionChangeData.length
+      : 0;
+
   const totalPoints = results.reduce((s, r) => {
     return s + normalizePoints(r.points, r.race.season, r.position);
   }, 0);
@@ -547,6 +553,7 @@ function computeDriverStats(
     avgFinishPosition: avgFinish,
     avgGridPosition: avgGrid,
     avgPositionsGained,
+    positionsGainedRate,
     consistencyScore: computeConsistencyScore(results),
     fastestLaps: results.filter((r) => r.fastest_lap_rank === 1).length,
     teammateRecord: {

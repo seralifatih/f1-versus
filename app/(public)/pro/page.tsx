@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "GridRival Pro — Ad-Free Experience",
-  description: "Remove ads and support GridRival with a Pro subscription.",
+  title: "F1-Versus Pro — Ad-Free Experience",
+  description: "Remove ads and support F1-Versus with a Pro subscription.",
   robots: { index: false, follow: false },
 };
 
@@ -58,7 +58,7 @@ export default function ProPage() {
             marginBottom: 10,
           }}
         >
-          GridRival Pro
+          F1-Versus Pro
         </h1>
 
         <p style={{ fontSize: 15, color: "#888", lineHeight: 1.6, marginBottom: 32 }}>
@@ -136,7 +136,7 @@ export default function ProPage() {
             textDecoration: "none",
           }}
         >
-          ← Back to GridRival
+          ← Back to F1-Versus
         </Link>
       </div>
     </div>

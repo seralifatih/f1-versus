@@ -16,6 +16,19 @@ function getPublicSupabaseConfig() {
   return { supabaseUrl, supabaseAnonKey };
 }
 
+function getServiceRoleSupabaseConfig() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables."
+    );
+  }
+
+  return { supabaseUrl, supabaseServiceRoleKey };
+}
+
 export function hasPublicSupabaseConfig() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
@@ -72,11 +85,7 @@ export function createServerClient() {
 // Bypasses RLS — never expose to the browser.
 
 export function createServiceRoleClient() {
-  const { supabaseUrl } = getPublicSupabaseConfig();
-  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseServiceRoleKey) {
-    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY environment variable.");
-  }
+  const { supabaseUrl, supabaseServiceRoleKey } = getServiceRoleSupabaseConfig();
   return createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: {
       autoRefreshToken: false,
