@@ -55,9 +55,51 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+type DriverWithRange = Driver & {
+  firstSeason: number;
+  lastSeason: number;
+};
+
+async function getDriverSeasonRanges(): Promise<Map<string, { firstSeason: number; lastSeason: number }>> {
+  const rangeByDriver = new Map<string, { firstSeason: number; lastSeason: number }>();
+  let from = 0;
+  const pageSize = 1000;
+
+  while (true) {
+    const { data, error: err } = await supabase
+      .from("results")
+      .select("driver_id, races!inner(season)")
+      .range(from, from + pageSize - 1);
+
+    if (err) throw err;
+    if (!data || data.length === 0) break;
+
+    for (const row of data as { driver_id: string; races: { season: number } | { season: number }[] | null }[]) {
+      const raceData = Array.isArray(row.races) ? row.races[0] : row.races;
+      const season = raceData?.season;
+      if (!row.driver_id || typeof season !== "number") continue;
+
+      const existing = rangeByDriver.get(row.driver_id);
+      if (!existing) {
+        rangeByDriver.set(row.driver_id, { firstSeason: season, lastSeason: season });
+      } else {
+        existing.firstSeason = Math.min(existing.firstSeason, season);
+        existing.lastSeason = Math.max(existing.lastSeason, season);
+      }
+    }
+
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return rangeByDriver;
+}
+
 // ─── Driver selection ──────────────────────────────────────────────────────
 
-async function getDriversToCompute(): Promise<Driver[]> {
+async function getDriversToCompute(): Promise<DriverWithRange[]> {
+  const rangeByDriver = await getDriverSeasonRanges();
+
   if (driverArgs.length > 0) {
     // Specific driver refs passed via CLI
     const { data, error: err } = await supabase
@@ -65,7 +107,12 @@ async function getDriversToCompute(): Promise<Driver[]> {
       .select("id, driver_ref, first_name, last_name, dob, nationality, headshot_url")
       .in("driver_ref", driverArgs);
     if (err) throw err;
-    return (data ?? []) as Driver[];
+    return ((data ?? []) as Driver[])
+      .map((driver) => {
+        const range = rangeByDriver.get(driver.id);
+        return range ? { ...driver, ...range } : null;
+      })
+      .filter(Boolean) as DriverWithRange[];
   }
 
   if (topN !== null) {
@@ -90,7 +137,12 @@ async function getDriversToCompute(): Promise<Driver[]> {
       .select("id, driver_ref, first_name, last_name, dob, nationality, headshot_url")
       .in("id", topDriverIds);
     if (err) throw err;
-    return (data ?? []) as Driver[];
+    return ((data ?? []) as Driver[])
+      .map((driver) => {
+        const range = rangeByDriver.get(driver.id);
+        return range ? { ...driver, ...range } : null;
+      })
+      .filter(Boolean) as DriverWithRange[];
   }
 
   // All drivers who have at least one race result
@@ -115,7 +167,7 @@ async function getDriversToCompute(): Promise<Driver[]> {
     from += pageSize;
   }
 
-  const drivers: Driver[] = [];
+  const drivers: DriverWithRange[] = [];
   const idChunks = chunkArray([...uniqueIds], 200);
 
   for (const idChunk of idChunks) {
@@ -125,7 +177,11 @@ async function getDriversToCompute(): Promise<Driver[]> {
       .in("id", idChunk);
 
     if (err) throw err;
-    drivers.push(...((data ?? []) as Driver[]));
+    for (const driver of (data ?? []) as Driver[]) {
+      const range = rangeByDriver.get(driver.id);
+      if (!range) continue;
+      drivers.push({ ...driver, ...range });
+    }
   }
 
   drivers.sort((a, b) => a.last_name.localeCompare(b.last_name));
@@ -137,10 +193,30 @@ async function getDriversToCompute(): Promise<Driver[]> {
 /**
  * Generate all unique unordered pairs from an array.
  */
-function generatePairs<T>(items: T[]): [T, T][] {
-  const pairs: [T, T][] = [];
+function generatePairs(items: DriverWithRange[]): [DriverWithRange, DriverWithRange][] {
+  const pairs: [DriverWithRange, DriverWithRange][] = [];
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
+      const driverA = items[i];
+      const driverB = items[j];
+
+      if (
+        !forceSeason &&
+        (driverA.lastSeason < driverB.firstSeason || driverB.lastSeason < driverA.firstSeason)
+      ) {
+        continue;
+      }
+
+      if (
+        forceSeason &&
+        (forceSeason < driverA.firstSeason ||
+          forceSeason > driverA.lastSeason ||
+          forceSeason < driverB.firstSeason ||
+          forceSeason > driverB.lastSeason)
+      ) {
+        continue;
+      }
+
       pairs.push([items[i], items[j]]);
     }
   }
