@@ -55,6 +55,34 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+async function getExistingComparisonSlugs(season?: number): Promise<Set<string>> {
+  const existing = new Set<string>();
+  let from = 0;
+  const pageSize = 1000;
+
+  while (true) {
+    let query = supabase
+      .from("driver_comparisons")
+      .select("slug")
+      .range(from, from + pageSize - 1);
+
+    query = season === undefined ? query.is("season", null) : query.eq("season", season);
+
+    const { data, error: err } = await query;
+    if (err) throw err;
+    if (!data || data.length === 0) break;
+
+    for (const row of data as { slug: string }[]) {
+      existing.add(row.slug);
+    }
+
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return existing;
+}
+
 type DriverWithRange = Driver & {
   firstSeason: number;
   lastSeason: number;
@@ -285,8 +313,20 @@ async function main(): Promise<void> {
     const drivers = await getDriversToCompute();
     log(`Found ${drivers.length} drivers to process`);
 
-    const pairs = generatePairs(drivers);
-    log(`Generating ${pairs.length} comparisons...`);
+    const allPairs = generatePairs(drivers);
+    log(`Generated ${allPairs.length} eligible comparisons before resume filtering`);
+
+    log("Loading existing comparisons for resume support...");
+    const existingSlugs = await getExistingComparisonSlugs(forceSeason);
+
+    const pairs = allPairs.filter(([driverA, driverB]) => {
+      const slug = buildComparisonSlug(driverA.driver_ref, driverB.driver_ref);
+      return !existingSlugs.has(slug);
+    });
+
+    log(
+      `Generating ${pairs.length} comparisons... (${existingSlugs.size} already computed and skipped)`
+    );
 
     let succeeded = 0;
     let failed = 0;
