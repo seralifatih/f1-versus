@@ -32,6 +32,9 @@ const seasonArg = args.find((a) => a.startsWith("--season="));
 const forceSeason = seasonArg ? parseInt(seasonArg.split("=")[1], 10) : undefined;
 const topArg = args.find((a) => a.startsWith("--top="));
 const topN = topArg ? parseInt(topArg.split("=")[1], 10) : null;
+const maxArg = args.find((a) => a.startsWith("--max="));
+const maxComparisons = maxArg ? parseInt(maxArg.split("=")[1], 10) : null;
+const CHECKPOINT_EVERY = 100;
 
 // ─── Logger ────────────────────────────────────────────────────────────────
 
@@ -324,20 +327,23 @@ async function main(): Promise<void> {
       return !existingSlugs.has(slug);
     });
 
+    const pairsToProcess =
+      maxComparisons !== null ? pairs.slice(0, maxComparisons) : pairs;
+
     log(
-      `Generating ${pairs.length} comparisons... (${existingSlugs.size} already computed and skipped)`
+      `Generating ${pairsToProcess.length} comparisons... (${existingSlugs.size} already computed and skipped${maxComparisons !== null ? `, capped at ${maxComparisons}` : ""})`
     );
 
     let succeeded = 0;
     let failed = 0;
 
-    for (let i = 0; i < pairs.length; i++) {
-      const [driverA, driverB] = pairs[i];
+    for (let i = 0; i < pairsToProcess.length; i++) {
+      const [driverA, driverB] = pairsToProcess[i];
       const slug = buildComparisonSlug(driverA.driver_ref, driverB.driver_ref);
 
       try {
         log(
-          `[${i + 1}/${pairs.length}] Computing ${slug}${forceSeason ? ` (${forceSeason})` : ""}...`
+          `[${i + 1}/${pairsToProcess.length}] Computing ${slug}${forceSeason ? ` (${forceSeason})` : ""}...`
         );
         await upsertComparison(
           driverA.id,
@@ -350,6 +356,17 @@ async function main(): Promise<void> {
       } catch (err) {
         warn(`Failed to compute ${slug}: ${String(err)}`);
         failed++;
+      }
+
+      const processed = i + 1;
+      if (processed % CHECKPOINT_EVERY === 0 || processed === pairsToProcess.length) {
+        const elapsedMinutes = (Date.now() - startTime) / 1000 / 60;
+        const rate = processed / Math.max(elapsedMinutes, 0.001);
+        const remaining = pairsToProcess.length - processed;
+        const etaMinutes = remaining / Math.max(rate, 0.001);
+        log(
+          `Checkpoint: ${processed}/${pairsToProcess.length} processed, ${succeeded} succeeded, ${failed} failed, elapsed ${elapsedMinutes.toFixed(1)}m, ETA ${etaMinutes.toFixed(1)}m`
+        );
       }
     }
 
