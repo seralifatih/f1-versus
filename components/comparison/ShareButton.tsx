@@ -9,9 +9,138 @@ interface ShareButtonProps {
   nameB: string;
 }
 
+// ─── Embed section ─────────────────────────────────────────────────────────
+
+export function EmbedSection({ slug }: { slug: string }) {
+  const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : "https://f1-versus.com";
+
+  const embedUrl = `${origin}/embed/${slug}`;
+  const iframeCode = `<iframe src="${embedUrl}" width="600" height="400" style="border:none;border-radius:12px;overflow:hidden;" loading="lazy" title="F1 Driver Comparison"></iframe>`;
+
+  const handleCopy = async () => {
+    trackEvent("embed_copy", { slug });
+    try {
+      await navigator.clipboard.writeText(iframeCode);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = iframeCode;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          background: "none",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+          color: "var(--muted-foreground)",
+          fontSize: 12,
+          fontWeight: 600,
+          textDecoration: "underline",
+          textUnderlineOffset: 3,
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 9h6M9 12h6M9 15h4" />
+        </svg>
+        {open ? "Hide embed code" : "Embed this comparison"}
+      </button>
+
+      {open && (
+        <div
+          style={{
+            marginTop: 10,
+            backgroundColor: "var(--surface-elevated)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: "12px 14px",
+            textAlign: "left",
+          }}
+        >
+          <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginBottom: 8 }}>
+            Paste this code into any webpage to embed the comparison widget:
+          </p>
+          <div
+            style={{
+              backgroundColor: "#0d0d0d",
+              border: "1px solid #1e1e1e",
+              borderRadius: 6,
+              padding: "10px 12px",
+              fontFamily: "monospace",
+              fontSize: 11,
+              color: "#a0aec0",
+              wordBreak: "break-all",
+              marginBottom: 10,
+              lineHeight: 1.6,
+            }}
+          >
+            {iframeCode}
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "7px 14px",
+              backgroundColor: copied ? "#166534" : "var(--surface-elevated)",
+              border: `1px solid ${copied ? "#166534" : "var(--border)"}`,
+              borderRadius: 6,
+              color: copied ? "#86efac" : "var(--foreground)",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "background-color 0.2s, border-color 0.2s, color 0.2s",
+            }}
+          >
+            {copied ? (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copy embed code
+              </>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ShareButton({ slug, nameA, nameB }: ShareButtonProps) {
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [copyingImage, setCopyingImage] = useState(false);
 
   const pageUrl =
     typeof window !== "undefined"
@@ -22,6 +151,11 @@ export function ShareButton({ slug, nameA, nameB }: ShareButtonProps) {
     typeof window !== "undefined"
       ? `${window.location.origin}/api/og/${slug}`
       : `https://f1-versus.com/api/og/${slug}`;
+
+  const cardImageUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/card/${slug}`
+      : `https://f1-versus.com/api/card/${slug}`;
 
   const handleCopy = async () => {
     trackEvent("share_clicked", { slug, method: "copy_link" });
@@ -61,6 +195,36 @@ export function ShareButton({ slug, nameA, nameB }: ShareButtonProps) {
       window.open(ogImageUrl, "_blank");
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleCopyImage = async () => {
+    trackEvent("share_clicked", { slug, method: "copy_image" });
+    setCopyingImage(true);
+    try {
+      const res = await fetch(cardImageUrl);
+      const blob = await res.blob();
+      // Use Clipboard API (requires HTTPS + permissions)
+      if (navigator.clipboard && typeof ClipboardItem !== "undefined") {
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob }),
+        ]);
+      } else {
+        // Fallback: download the square card instead
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${slug}-card.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      // Last resort: open card in new tab
+      window.open(cardImageUrl, "_blank");
+    } finally {
+      setCopyingImage(false);
     }
   };
 
@@ -159,6 +323,56 @@ export function ShareButton({ slug, nameA, nameB }: ShareButtonProps) {
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
             Download Image
+          </>
+        )}
+      </button>
+
+      {/* Copy as image (1080×1080 square card for Instagram/Twitter) */}
+      <button
+        type="button"
+        onClick={handleCopyImage}
+        disabled={copyingImage}
+        style={{
+          ...tapTargetStyle,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "10px 20px",
+          backgroundColor: "var(--surface-elevated)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+          color: "var(--foreground)",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: copyingImage ? "wait" : "pointer",
+          opacity: copyingImage ? 0.7 : 1,
+          transition: "opacity 0.15s",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {copyingImage ? (
+          <>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              style={{ animation: "spin 1s linear infinite" }}
+            >
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+            </svg>
+            Copying…
+          </>
+        ) : (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="14" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+            Copy as Image
           </>
         )}
       </button>

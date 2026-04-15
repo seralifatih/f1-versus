@@ -5,8 +5,7 @@ import { posts } from "../posts";
 
 /* eslint-disable react/no-unescaped-entities */
 
-// ISR: revalidate daily
-export const revalidate = 86400;
+export const dynamic = "force-static";
 
 export function generateStaticParams() {
   return posts.map((p) => ({ slug: p.slug }));

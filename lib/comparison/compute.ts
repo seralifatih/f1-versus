@@ -10,6 +10,7 @@
 
 import { createServiceRoleClient } from "../supabase/client";
 import { buildRadarMetrics, computeOverallScore } from "./normalize";
+import { fetchMetricDistributions } from "./distributions";
 import {
   buildComparisonSlug,
   parsePosition,
@@ -35,6 +36,16 @@ import {
 
 const POST_2010_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 const PRE_2010_POINTS = [10, 8, 6, 5, 4, 3, 2, 1, 0, 0];
+
+/**
+ * Era-adjustment multiplier for aggregate points totals.
+ * Use when position data isn't available (e.g. career total imports).
+ * Pre-2010 max win = 10pts vs post-2010 max win = 25pts → multiplier 2.5.
+ */
+export function normalizePointsForEra(points: number, season: number): number {
+  if (season >= 2010) return points;
+  return Math.round(points * 2.5);
+}
 
 function normalizePoints(rawPoints: number, season: number, position: number | null): number {
   if (season >= 2010) return rawPoints;
@@ -767,11 +778,14 @@ export async function computeComparison(
 
   // Compute head-to-head and radar
   const headToHead = computeHeadToHead(resultsA, resultsB);
-  const radarMetrics = buildRadarMetrics(statsA, statsB);
+  const distributions = await fetchMetricDistributions();
+  const radarMetrics = buildRadarMetrics(statsA, statsB, distributions.size > 0 ? distributions : undefined);
   const sharedSeasons = findSharedSeasons(resultsA, resultsB);
 
   // Canonical slug (alphabetical by driver_ref)
   const canonicalSlug = buildComparisonSlug(driverA.driver_ref, driverB.driver_ref);
+
+  const cross_era = sharedSeasons.length === 0;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -784,6 +798,7 @@ export async function computeComparison(
     radarMetrics,
     sharedSeasons,
     canonicalSlug,
+    cross_era,
   };
 }
 

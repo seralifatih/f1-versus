@@ -16,7 +16,8 @@ type EventName =
   | "comparison_viewed"
   | "vote_cast"
   | "share_clicked"
-  | "search_compare";
+  | "search_compare"
+  | "embed_copy";
 
 type EventProperties = Record<string, string | number | boolean>;
 

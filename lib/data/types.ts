@@ -218,6 +218,24 @@ export interface RadarMetric {
   driverB: number;
   /** Higher is better? Inverted metrics (e.g. DNF rate) will be set to false */
   higherIsBetter: boolean;
+  /**
+   * Human-readable all-time percentile label for each driver, e.g. "Top 3%".
+   * Only present when global distributions were available at compute time.
+   */
+  percentileA?: string;
+  percentileB?: string;
+}
+
+/**
+ * One row of the metric_distributions table.
+ * Populated by compute-comparisons.ts after each full run.
+ */
+export interface MetricDistribution {
+  metric_name: string;
+  p10: number;
+  p50: number;
+  p90: number;
+  max: number;
 }
 
 /**
@@ -245,6 +263,8 @@ export interface ComparisonResult {
   sharedSeasons: number[];
   /** Slug in canonical (alphabetical) order */
   canonicalSlug: string;
+  /** True when the two drivers raced in different eras (no shared seasons) */
+  cross_era: boolean;
 }
 
 export interface ComparisonFilters {
@@ -254,6 +274,86 @@ export interface ComparisonFilters {
   circuitType?: "street" | "permanent";
   /** Only wet-weather races (requires weather_conditions table data) */
   wetOnly?: boolean;
+}
+
+// ─── Team / Constructor Comparison Types ──────────────────────────────────
+
+export interface TeamSeasonStats {
+  season: number;
+  races: number;
+  wins: number;
+  podiums: number;
+  poles: number;
+  oneTwos: number;
+  points: number;
+  normalizedPoints: number;
+  championship_position: number | null;
+  drivers: string[]; // display names of drivers that season
+}
+
+export interface TeamStats {
+  constructorId: string;
+  constructorRef: string;
+  name: string;
+  color: string;
+  totalRaces: number;
+  wins: number;
+  poles: number;
+  podiums: number;
+  oneTwos: number;
+  dnfs: number;
+  championships: number;
+  totalPoints: number;
+  pointsPerRace: number;
+  podiumRate: number;
+  winRate: number;
+  firstSeason: number | null;
+  lastSeason: number | null;
+  seasonBreakdown: TeamSeasonStats[];
+  driverLineup: TeamDriverEntry[];
+  bestSeason: TeamSeasonStats | null;
+  worstSeason: TeamSeasonStats | null;
+}
+
+export interface TeamDriverEntry {
+  driverRef: string;
+  name: string;
+  seasons: number[];
+  races: number;
+  wins: number;
+  podiums: number;
+}
+
+export interface TeamComparisonResult {
+  generatedAt: string;
+  constructorA: Constructor;
+  constructorB: Constructor;
+  statsA: TeamStats;
+  statsB: TeamStats;
+  headToHead: TeamHeadToHeadRecord;
+  radarMetrics: RadarMetric[];
+  sharedSeasons: number[];
+  canonicalSlug: string;
+}
+
+export interface TeamHeadToHeadRecord {
+  /** Seasons both teams competed; within each season: who scored more points */
+  totalSharedSeasons: number;
+  seasonWinsA: number;
+  seasonWinsB: number;
+  /** Race-level: within each shared race, who finished higher (best driver) */
+  raceLeadsA: number;
+  raceLeadsB: number;
+}
+
+/**
+ * Builds a canonical team comparison slug from two constructor refs.
+ * Alphabetical order by ref.
+ * @example buildTeamSlug("ferrari", "mclaren") → "ferrari-vs-mclaren"
+ */
+export function buildTeamSlug(refA: string, refB: string): string {
+  const [first, second] = [refA, refB].sort((a, b) => a.localeCompare(b));
+  return `${first}-vs-${second}`;
 }
 
 // ─── Jolpica API Response Types ────────────────────────────────────────────
@@ -344,13 +444,41 @@ export interface JolpicaQualifyingResult {
 
 // ─── Helper / Utility Types ────────────────────────────────────────────────
 
-/** Builds a comparison slug from two driver refs. Alphabetical by last name. */
+/**
+ * Extracts the last-name segment from a Jolpica driver ref for sort purposes.
+ * Jolpica refs are `firstname_lastname` (e.g. `max_verstappen`, `lewis_hamilton`).
+ * Single-segment refs (e.g. `senna`, `prost`) are returned as-is.
+ *
+ * @example refLastName("max_verstappen") → "verstappen"
+ * @example refLastName("michael_schumacher") → "schumacher"
+ * @example refLastName("mick_schumacher") → "schumacher"
+ * @example refLastName("senna") → "senna"
+ */
+export function refLastName(driverRef: string): string {
+  const idx = driverRef.lastIndexOf("_");
+  return idx === -1 ? driverRef : driverRef.slice(idx + 1);
+}
+
+/**
+ * Builds a comparison slug from two Jolpica driver refs.
+ * Canonical order: alphabetical by last name (extracted from ref).
+ * Tie-break on full ref so Schumacher M vs Schumacher R is deterministic.
+ * URL tokens are the full driver refs.
+ *
+ * @example buildComparisonSlug("max_verstappen", "lewis_hamilton") → "lewis_hamilton-vs-max_verstappen"
+ * @example buildComparisonSlug("michael_schumacher", "mick_schumacher") → "michael_schumacher-vs-mick_schumacher"
+ */
 export function buildComparisonSlug(
   driverARef: string,
   driverBRef: string
 ): string {
-  const refs = [driverARef, driverBRef].sort((a, b) => a.localeCompare(b));
-  return `${refs[0]}-vs-${refs[1]}`;
+  const [first, second] = [driverARef, driverBRef].sort((a, b) => {
+    const lastA = refLastName(a);
+    const lastB = refLastName(b);
+    const byLast = lastA.localeCompare(lastB);
+    return byLast !== 0 ? byLast : a.localeCompare(b); // tie-break on full ref
+  });
+  return `${first}-vs-${second}`;
 }
 
 /** Parses a comparison slug into the two driver refs. */
@@ -393,9 +521,11 @@ export function getDriverSlug(driver: Pick<Driver, "driver_ref" | "first_name" |
 
 /**
  * Returns the canonical comparison slug for two drivers.
- * Always in alphabetical order by last name so each pair has exactly one URL.
+ * Canonical order: alphabetical by last name; tie-break on driver_ref.
+ * Tokens are last-name-based (via getDriverSlug).
  *
- * @example getComparisonSlug(driverA, driverB) → "hamilton-vs-verstappen"
+ * @example getComparisonSlug(hamiltonDriver, verstappenDriver) → "hamilton-vs-verstappen"
+ * @example getComparisonSlug(michaelDriver, mickDriver) → "michael_schumacher-vs-mick_schumacher" (uses driver_ref via getDriverSlug fallback)
  */
 export function getComparisonSlug(
   driverA: Pick<Driver, "driver_ref" | "first_name" | "last_name">,
@@ -403,8 +533,12 @@ export function getComparisonSlug(
 ): string {
   const slugA = getDriverSlug(driverA);
   const slugB = getDriverSlug(driverB);
-  const [first, second] = [slugA, slugB].sort((a, b) => a.localeCompare(b));
-  return `${first}-vs-${second}`;
+  const lastA = driverA.last_name.trim().toLowerCase();
+  const lastB = driverB.last_name.trim().toLowerCase();
+  const byLast = lastA.localeCompare(lastB);
+  // tie-break: same last name → sort by driver_ref
+  const aFirst = byLast < 0 || (byLast === 0 && driverA.driver_ref.localeCompare(driverB.driver_ref) <= 0);
+  return aFirst ? `${slugA}-vs-${slugB}` : `${slugB}-vs-${slugA}`;
 }
 
 /**

@@ -6,6 +6,22 @@ const nextConfig = {
     },
   },
 
+  async headers() {
+    return [
+      {
+        // Allow /embed/* to be loaded in any iframe (for blog/Reddit embeds)
+        source: "/embed/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "ALLOWALL" },
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors *",
+          },
+        ],
+      },
+    ];
+  },
+
   images: {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 604800,

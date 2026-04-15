@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     "All-time Formula 1 driver rankings sorted by wins, poles, podiums, and more. Compare any driver head-to-head.",
 };
 
-export const revalidate = 86400;
+export const dynamic = "force-static";
 
 type SortKey = "wins" | "poles" | "podiums" | "races" | "points";
 

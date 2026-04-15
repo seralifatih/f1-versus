@@ -16,6 +16,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import type { DriverWithStats } from "@/app/(public)/drivers/page";
 
@@ -211,6 +212,24 @@ function DriverCard({
           </div>
         )}
       </div>
+
+      {/* Profile link */}
+      <Link
+        href={`/drivers/${driver.driver_ref}`}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          display: "inline-block",
+          marginTop: 10,
+          fontSize: 11,
+          fontWeight: 600,
+          color: "var(--muted-foreground)",
+          textDecoration: "none",
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = driver.teamColor ?? "var(--accent)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--muted-foreground)"; }}
+      >
+        View profile →
+      </Link>
     </button>
   );
 }

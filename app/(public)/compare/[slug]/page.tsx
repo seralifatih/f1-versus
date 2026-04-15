@@ -14,7 +14,7 @@ import {
 import { SeasonTimeline } from "@/components/charts/SeasonTimeline";
 import { TeammateBattle } from "@/components/comparison/TeammateBattle";
 import { FilterableComparison } from "@/components/comparison/FilterableComparison";
-import { ShareButton } from "@/components/comparison/ShareButton";
+import { ShareButton, EmbedSection } from "@/components/comparison/ShareButton";
 import { VoteWidget } from "@/components/comparison/VoteWidget";
 import { CircuitBreakdown } from "@/components/comparison/CircuitBreakdown";
 import { getComparisonSummary, type AISummaryResult } from "@/lib/ai/summary";
@@ -24,12 +24,73 @@ import { getSiteUrl } from "@/lib/site-url";
 import Link from "next/link";
 import Image from "next/image";
 
-// ISR: revalidate every 24 hours
-export const revalidate = 86400;
+export const dynamic = "force-static";
 
 // ─── Static Params ─────────────────────────────────────────────────────────
 // Pre-render top 400 driver pairs at build time.
-// Priority: current grid × current grid, then top historical pairs by win count.
+// Priority: legend seed pairs first, then current grid × current grid,
+// then top historical pairs by win count.
+
+/**
+ * Top-50 legend pairs guaranteed to be pre-rendered at build time.
+ * Uses Jolpica driver refs (lowercase_underscored).
+ */
+const LEGEND_PAIRS: [string, string][] = [
+  ["senna", "prost"],
+  ["hamilton", "schumacher"],
+  ["verstappen", "hamilton"],
+  ["fangio", "clark"],
+  ["schumacher", "villeneuve"],
+  ["senna", "mansell"],
+  ["prost", "lauda"],
+  ["hamilton", "button"],
+  ["vettel", "alonso"],
+  ["verstappen", "leclerc"],
+  ["schumacher", "hakkinen"],
+  ["senna", "schumacher"],
+  ["alonso", "hamilton"],
+  ["vettel", "hamilton"],
+  ["lauda", "hunt"],
+  ["mansell", "piquet"],
+  ["hill", "schumacher"],
+  ["prost", "mansell"],
+  ["senna", "berger"],
+  ["stewart", "rindt"],
+  ["clark", "surtees"],
+  ["fangio", "moss"],
+  ["hill_damon", "villeneuve"],
+  ["schumacher", "barrichello"],
+  ["alonso", "raikkonen"],
+  ["vettel", "webber"],
+  ["hamilton", "rosberg"],
+  ["verstappen", "norris"],
+  ["leclerc", "sainz"],
+  ["raikkonen", "massa"],
+  ["prost", "piquet"],
+  ["mansell", "senna"],
+  ["coulthard", "hakkinen"],
+  ["button", "perez"],
+  ["alonso", "button"],
+  ["vettel", "raikkonen"],
+  ["hamilton", "alonso"],
+  ["schumacher_mick", "verstappen"],
+  ["lauda", "regazzoni"],
+  ["moss", "hawthorn"],
+  ["hill_graham", "clark"],
+  ["andretti", "peterson"],
+  ["piquet", "senna"],
+  ["berger", "alesi"],
+  ["fisichella", "alonso"],
+  ["kubica", "hamilton"],
+  ["rosberg_keke", "piquet"],
+  ["schumacher", "coulthard"],
+  ["hakkinen", "irvine"],
+];
+
+function legendSlug(a: string, b: string): string {
+  const refs = [a, b].sort((x, y) => x.localeCompare(y));
+  return `${refs[0]}-vs-${refs[1]}`;
+}
 
 export async function generateStaticParams(): Promise<{ slug: string }[]> {
   if (!hasPublicSupabaseConfig()) {
@@ -78,12 +139,23 @@ export async function generateStaticParams(): Promise<{ slug: string }[]> {
     return currentBoost + combinedWins;
   };
 
-  return (comparisonRows as StaticParamRow[])
-    .filter((row) => row.slug)
-    .sort((a, b) => scoreRow(b) - scoreRow(a))
-    .slice(0, 400)
-    .map((row) => ({ slug: row.slug as string }));
+  // Build guaranteed legend slugs that exist in the DB
+  const legendSlugs = new Set(LEGEND_PAIRS.map(([a, b]) => legendSlug(a, b)));
+  const dbSlugs = new Set(
+    (comparisonRows as StaticParamRow[]).filter((r) => r.slug).map((r) => r.slug as string)
+  );
+  const guaranteedSlugs = [...legendSlugs].filter((s) => dbSlugs.has(s));
 
+  // Remaining rows sorted by score, excluding already-guaranteed pairs
+  const ranked = (comparisonRows as StaticParamRow[])
+    .filter((row) => row.slug && !legendSlugs.has(row.slug as string))
+    .sort((a, b) => scoreRow(b) - scoreRow(a))
+    .slice(0, 400 - guaranteedSlugs.length)
+    .map((row) => row.slug as string);
+
+  const allSlugs = [...guaranteedSlugs, ...ranked];
+
+  return allSlugs.map((slug) => ({ slug }));
 }
 
 // ─── Metadata ──────────────────────────────────────────────────────────────
@@ -96,6 +168,8 @@ export async function generateMetadata({
   const parsed = parseComparisonSlug(params.slug);
   if (!parsed) return { title: "Comparison Not Found" };
 
+  const canonicalSlug = buildComparisonSlug(parsed.driverARef, parsed.driverBRef);
+
   if (!hasPublicSupabaseConfig()) {
     const fallbackNameA = parsed.driverARef.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     const fallbackNameB = parsed.driverBRef.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -106,7 +180,7 @@ export async function generateMetadata({
       title,
       description,
       alternates: {
-        canonical: `/compare/${params.slug}`,
+        canonical: `/compare/${canonicalSlug}`,
       },
     };
   }
@@ -128,7 +202,7 @@ export async function generateMetadata({
     supabase
       .from("driver_comparisons")
       .select("stats_json")
-      .eq("slug", buildComparisonSlug(parsed.driverARef, parsed.driverBRef))
+      .eq("slug", canonicalSlug)
       .is("season", null)
       .single(),
   ]);
@@ -168,7 +242,7 @@ export async function generateMetadata({
       type: "website",
       images: [
         {
-          url: `/api/og/${params.slug}`,
+          url: `/api/og/${canonicalSlug}`,
           width: 1200,
           height: 630,
           alt: `${nameA} vs ${nameB} comparison card`,
@@ -179,10 +253,10 @@ export async function generateMetadata({
       card: "summary_large_image",
       title,
       description,
-      images: [`/api/og/${params.slug}`],
+      images: [`/api/og/${canonicalSlug}`],
     },
     alternates: {
-      canonical: `/compare/${params.slug}`,
+      canonical: `/compare/${canonicalSlug}`,
     },
   };
 }
@@ -755,6 +829,8 @@ export default async function ComparePage({
       {/* ── 5. Season Timeline ─────────────────────────────────────────── */}
       <section className="mb-10">
         <SectionTitle>Season-by-Season Points</SectionTitle>
+        {/* min-height reserves space during Recharts hydration to prevent CLS */}
+        <div style={{ minHeight: 300 }}>
         <SeasonTimeline
           nameA={driverA.last_name}
           nameB={driverB.last_name}
@@ -763,6 +839,7 @@ export default async function ComparePage({
           breakdownA={statsA.seasonBreakdown}
           breakdownB={statsB.seasonBreakdown}
         />
+        </div>
       </section>
 
       {/* ── 6. Teammate Battle ─────────────────────────────────────────── */}
@@ -979,7 +1056,9 @@ function HeroHeader({
             className="flex flex-1 flex-col items-center gap-3 px-6 py-6 sm:py-8"
             style={{ borderLeft: `4px solid ${colorA}` }}
           >
-            <DriverAvatar driver={driverA} color={colorA} size={72} />
+            <Link href={`/drivers/${driverA.driver_ref}`} style={{ display: "block" }} title={`${driverA.first_name} ${driverA.last_name} profile`}>
+              <DriverAvatar driver={driverA} color={colorA} size={72} />
+            </Link>
             <div className="text-center">
               <p className="text-sm font-medium" style={{ color: colorA }}>
                 {driverA.first_name}
@@ -1013,7 +1092,9 @@ function HeroHeader({
             className="flex flex-1 flex-col items-center gap-3 px-6 py-6 sm:py-8"
             style={{ borderRight: `4px solid ${colorB}` }}
           >
-            <DriverAvatar driver={driverB} color={colorB} size={72} />
+            <Link href={`/drivers/${driverB.driver_ref}`} style={{ display: "block" }} title={`${driverB.first_name} ${driverB.last_name} profile`}>
+              <DriverAvatar driver={driverB} color={colorB} size={72} />
+            </Link>
             <div className="text-center">
               <p className="text-sm font-medium" style={{ color: colorB }}>
                 {driverB.first_name}
@@ -1205,6 +1286,7 @@ function ShareCard({
           {nameA} vs {nameB} — settled by data.
         </p>
         <ShareButton slug={slug} nameA={nameA} nameB={nameB} />
+        <EmbedSection slug={slug} />
       </Card>
     </section>
   );

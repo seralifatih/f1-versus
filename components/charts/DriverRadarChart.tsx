@@ -57,6 +57,8 @@ interface DriverRadarChartProps {
   colorB: string;
   /** Max number of axes to render. Defaults to 6. */
   maxAxes?: number;
+  /** Accessible label for the chart region. */
+  ariaLabel?: string;
 }
 
 // Recharts tooltip payload type
@@ -99,12 +101,21 @@ function CustomTooltip({
   active,
   payload,
   label,
+  metrics,
+  nameA,
+  nameB,
 }: {
   active?: boolean;
   payload?: TooltipPayload[];
   label?: string;
+  metrics: RadarMetric[];
+  nameA: string;
+  nameB: string;
 }) {
   if (!active || !payload?.length) return null;
+
+  // Find the metric matching this axis label so we can show percentile labels
+  const metric = metrics.find((m) => m.label === label);
 
   return (
     <div
@@ -114,6 +125,7 @@ function CustomTooltip({
         borderRadius: 8,
         padding: "10px 14px",
         fontSize: 13,
+        maxWidth: 200,
       }}
     >
       <p
@@ -128,20 +140,37 @@ function CustomTooltip({
       >
         {label}
       </p>
-      {payload.map((entry) => (
-        <p
-          key={entry.name}
-          style={{
-            color: entry.color,
-            fontWeight: 700,
-            marginBottom: 2,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {entry.name}:{" "}
-          <span style={{ color: "#fafafa" }}>{entry.value} / 10</span>
-        </p>
-      ))}
+      {payload.map((entry) => {
+        const isA = entry.name === nameA;
+        const percentile = metric ? (isA ? metric.percentileA : metric.percentileB) : undefined;
+        return (
+          <div key={entry.name} style={{ marginBottom: 4 }}>
+            <p
+              style={{
+                color: entry.color,
+                fontWeight: 700,
+                marginBottom: percentile ? 1 : 0,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {entry.name}:{" "}
+              <span style={{ color: "#fafafa" }}>{entry.value} / 10</span>
+            </p>
+            {percentile && (
+              <p
+                style={{
+                  color: "#666",
+                  fontSize: 10,
+                  fontWeight: 500,
+                  marginLeft: 0,
+                }}
+              >
+                {percentile} of all F1 drivers
+              </p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -220,11 +249,14 @@ function MobileBarChart({
   colorA,
   colorB,
   maxAxes = 6,
+  ariaLabel,
 }: DriverRadarChartProps) {
   const axes = metrics.slice(0, maxAxes);
 
   return (
     <div
+      role="img"
+      aria-label={ariaLabel ?? `Performance comparison: ${nameA} vs ${nameB}`}
       style={{
         backgroundColor: "#111",
         border: "1px solid #222",
@@ -353,9 +385,11 @@ export function DriverRadarChart({
   colorA,
   colorB,
   maxAxes = 6,
+  ariaLabel,
 }: DriverRadarChartProps) {
   const isMobile = useIsMobile(640);
   const [containerRef, inView] = useInView(0.15);
+  const label = ariaLabel ?? `Radar chart: ${nameA} vs ${nameB} across ${Math.min(metrics.length, maxAxes)} performance metrics`;
 
   // On mobile, show the simplified bar chart
   if (isMobile) {
@@ -367,6 +401,7 @@ export function DriverRadarChart({
         colorA={colorA}
         colorB={colorB}
         maxAxes={maxAxes}
+        ariaLabel={label}
       />
     );
   }
@@ -389,7 +424,7 @@ export function DriverRadarChart({
     axes.reduce((sum, m) => sum + m.driverB, 0) / (axes.length || 1);
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} role="img" aria-label={label}>
       {/* Responsive: 50% width on md+, full width on mobile */}
       <div
         style={{
@@ -462,7 +497,13 @@ export function DriverRadarChart({
 
             {/* Tooltip */}
             <Tooltip
-              content={<CustomTooltip />}
+              content={
+                <CustomTooltip
+                  metrics={axes}
+                  nameA={nameA}
+                  nameB={nameB}
+                />
+              }
               cursor={false}
             />
 

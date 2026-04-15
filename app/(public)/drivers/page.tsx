@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Browse all Formula 1 drivers. Select any two to generate a head-to-head comparison with career stats, radar charts, and teammate records.",
 };
 
-export const revalidate = 86400;
+export const dynamic = "force-static";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 

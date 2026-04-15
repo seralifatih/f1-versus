@@ -13,7 +13,9 @@
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "sync": "npx tsx scripts/sync-data.ts",
     "sync:incremental": "npx tsx scripts/sync-data.ts --incremental",
-    "compute": "npx tsx scripts/compute-comparisons.ts"
+    "compute": "npx tsx scripts/compute-comparisons.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "1.15.1",
@@ -22,6 +24,7 @@
     "@vercel/og": "^0.6.2",
     "clsx": "^2.1.1",
     "dotenv": "^16.4.5",
+    "groq-sdk": "^1.1.2",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
@@ -41,6 +44,7 @@
     "tailwindcss": "^3.4.4",
     "tsx": "^4.15.7",
     "typescript": "^5.4.5",
+    "vitest": "^4.1.4",
     "wrangler": "^4.68.0"
   }
 }

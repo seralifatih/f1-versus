@@ -441,7 +441,7 @@ export function SeasonTimeline({
   const chartHeight = isMobile ? 220 : 280;
 
   return (
-    <div>
+    <div role="img" aria-label={`Season-by-season points chart: ${nameA} vs ${nameB}`}>
       {/* Legend */}
       <div
         style={{

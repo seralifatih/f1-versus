@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { getSiteUrl } from "@/lib/site-url";
+import { CookieBanner } from "@/components/ui/CookieBanner";
 import "./globals.css";
 
 // Viewport: responsive scaling + allow pinch-to-zoom (accessibility best practice)
@@ -38,9 +39,8 @@ export const metadata: Metadata = {
   },
 };
 
+// Set in .env.local / Cloudflare env vars
 const ADSENSE_CLIENT_ID = process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID ?? "";
-// Set in Cloudflare Pages dashboard → Settings → Environment variables
-// Get your token from dash.cloudflare.com → Web Analytics → Sites
 const CF_ANALYTICS_TOKEN = process.env.NEXT_PUBLIC_CF_ANALYTICS_TOKEN ?? "";
 
 export default function RootLayout({
@@ -51,15 +51,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-        {ADSENSE_CLIENT_ID && (
-          <Script
-            async
-            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT_ID}`}
-            crossOrigin="anonymous"
-            strategy="afterInteractive"
-          />
-        )}
-        {/* Cloudflare Web Analytics — privacy-friendly, no cookies */}
+        {/* Cloudflare Web Analytics — cookie-free, loads unconditionally */}
         {CF_ANALYTICS_TOKEN && (
           <Script
             defer
@@ -68,6 +60,12 @@ export default function RootLayout({
             strategy="afterInteractive"
           />
         )}
+        {/*
+          AdSense script is intentionally NOT loaded here.
+          CookieBanner loads it client-side only after user consent.
+          Pass the client ID as a data attribute via env so the
+          banner can read it without a server round-trip.
+        */}
       </head>
       <body className="min-h-screen antialiased">
         <a
@@ -79,6 +77,8 @@ export default function RootLayout({
         <SiteHeader />
         <main id="main-content">{children}</main>
         <SiteFooter />
+        {/* Cookie consent banner — gates AdSense until accepted */}
+        <CookieBanner adSenseClientId={ADSENSE_CLIENT_ID} />
       </body>
     </html>
   );
@@ -157,6 +157,20 @@ function SiteFooter() {
             .
           </p>
           <div className="flex items-center gap-4 flex-wrap justify-center sm:justify-end">
+            <a
+              href="/privacy"
+              className="text-xs hover:text-white transition-colors"
+              style={{ color: "#444" }}
+            >
+              Privacy
+            </a>
+            <a
+              href="/terms"
+              className="text-xs hover:text-white transition-colors"
+              style={{ color: "#444" }}
+            >
+              Terms
+            </a>
             <a
               href="/changelog"
               className="text-xs hover:text-white transition-colors"

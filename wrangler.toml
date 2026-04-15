@@ -19,3 +19,6 @@ enabled = true
 NEXT_PUBLIC_SUPABASE_URL = "https://qpkcmhpeummjhjqalmaa.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwa2NtaHBldW1tamhqcWFsbWFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3OTMwNDIsImV4cCI6MjA5MDM2OTA0Mn0.2_Afuwvvy_s92RZ_lDAopZ7odGhBgDh1ioFYCYvX63o"
 NEXT_PUBLIC_SITE_URL = "https://f1-versus.com"
+# Set the real value via: wrangler secret put GROQ_API_KEY
+# Placeholder here so the var name is visible in version control
+GROQ_API_KEY = ""

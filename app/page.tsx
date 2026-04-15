@@ -3,7 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
 import { createClient } from "@supabase/supabase-js";
-import { buildComparisonSlug } from "@/lib/data/types";
+import { buildComparisonSlug, buildTeamSlug, getTeamColor } from "@/lib/data/types";
 import { DriverSearchBar } from "@/components/home/DriverSearchBar";
 import { AdBanner } from "@/components/ui/AdBanner";
 
@@ -13,8 +13,7 @@ export const metadata: Metadata = {
     "Head-to-head Formula 1 driver comparisons powered by real race data. Wins, poles, podiums, consistency — settle the debate with stats.",
 };
 
-// Revalidate every hour so trending + stats stay fresh
-export const revalidate = 3600;
+export const dynamic = "force-static";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -65,6 +64,18 @@ const POPULAR_MATCHUPS = [
   { a: "vettel", b: "hamilton", label: "Dual Era Dominance" },
   { a: "alonso", b: "hamilton", label: "2007 Teammates" },
   { a: "leclerc", b: "sainz", label: "Ferrari Showdown" },
+];
+
+// ─── Team rivalry cards ────────────────────────────────────────────────────
+// Six iconic constructor battles that anchor the new keyword cluster.
+
+const TEAM_RIVALRIES = [
+  { a: "ferrari",   b: "mclaren",  label: "The Greatest Team Rivalry" },
+  { a: "mercedes",  b: "red_bull", label: "Hybrid Era Dominance" },
+  { a: "ferrari",   b: "williams", label: "1990s Powerhouse Clash" },
+  { a: "ferrari",   b: "renault",  label: "Schumacher vs Alonso Era" },
+  { a: "mclaren",   b: "williams", label: "British Giants" },
+  { a: "lotus_f1",  b: "ferrari",  label: "Classic 60s Rivalry" },
 ];
 
 // ─── Data fetchers ─────────────────────────────────────────────────────────
@@ -629,6 +640,60 @@ export default async function HomePage() {
           </div>
         </section>
 
+        {/* ── Team Rivalries ───────────────────────────────────────────── */}
+        <section style={{ marginBottom: 64 }}>
+          <SectionHeader
+            title="Team Rivalries"
+            subtitle="Constructor head-to-heads across every season"
+            href="/teams"
+            hrefLabel="All teams →"
+          />
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {TEAM_RIVALRIES.map(({ a, b, label }) => {
+              const slug = buildTeamSlug(a, b);
+              const colorA = getTeamColor(a);
+              const colorB = getTeamColor(b);
+              return (
+                <Link
+                  key={slug}
+                  href={`/compare/teams/${slug}`}
+                  style={{
+                    display: "block",
+                    backgroundColor: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 12,
+                    padding: "16px",
+                    textDecoration: "none",
+                    transition: "border-color 0.15s",
+                  }}
+                >
+                  {/* Colored bars */}
+                  <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
+                    <div style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: colorA }} />
+                    <div style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: colorB }} />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: colorA }}>
+                      {a.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </span>
+                    <span style={{ fontSize: 10, fontWeight: 900, color: "#333", letterSpacing: "0.12em" }}>VS</span>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: colorB }}>
+                      {b.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 11, color: "#555", marginTop: 6 }}>{label}</p>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
         {/* ── Browse CTA ────────────────────────────────────────────────── */}
         <section>
           <div
@@ -710,6 +775,25 @@ export default async function HomePage() {
                 }}
               >
                 All-Time Rankings
+              </Link>
+              <Link
+                href="/teams"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "12px 24px",
+                  backgroundColor: "var(--surface-elevated)",
+                  color: "var(--foreground)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  textDecoration: "none",
+                  transition: "opacity 0.15s",
+                }}
+              >
+                Browse Teams
               </Link>
             </div>
           </div>
