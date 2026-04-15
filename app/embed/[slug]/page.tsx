@@ -4,7 +4,6 @@
  * Includes backlink to full comparison page.
  */
 
-import { notFound } from "next/navigation";
 import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
 import { computeComparison } from "@/lib/comparison/compute";
 import {
@@ -54,6 +53,7 @@ async function getEmbedData(slug: string): Promise<{
   const parsed = parseComparisonSlug(slug);
   if (!parsed) return null;
 
+  try {
   const supabase = createServerClient();
 
   const [{ data: dA }, { data: dB }] = await Promise.all([
@@ -123,6 +123,9 @@ async function getEmbedData(slug: string): Promise<{
     colorA,
     colorB,
   };
+  } catch {
+    return null;
+  }
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
@@ -133,7 +136,28 @@ export default async function EmbedPage({
   params: { slug: string };
 }) {
   const data = await getEmbedData(params.slug);
-  if (!data) notFound();
+
+  // No data at build time (missing env vars) — render minimal shell.
+  // At runtime on Cloudflare the real env vars are present and data loads.
+  if (!data) {
+    const parsed = parseComparisonSlug(params.slug);
+    const siteUrl = getSiteUrl();
+    return (
+      <html lang="en">
+        <head>
+          <meta charSet="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <meta name="robots" content="noindex" />
+          <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } html, body { width: 100%; height: 100%; background: #0a0a0a; color: #fff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; }`}</style>
+        </head>
+        <body>
+          <a href={`${siteUrl}/compare/${params.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#666", textDecoration: "none" }}>
+            {parsed ? `${parsed.driverARef} vs ${parsed.driverBRef}` : "F1 Comparison"} — View on f1-versus.com
+          </a>
+        </body>
+      </html>
+    );
+  }
 
   const { driverA, driverB, comparison, colorA, colorB } = data;
   const siteUrl = getSiteUrl();

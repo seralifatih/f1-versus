@@ -231,7 +231,8 @@ export async function getComparisonSummary(
     writeCachedSummary(slug, text).catch(() => null);
     return { text, isAI: true };
   } catch (err) {
-    console.warn("[AI Summary] Groq unavailable, using template fallback:", err);
+    // Silently fall back — expected during static builds where GROQ_API_KEY is absent
+    void err;
   }
 
   // 3. Template fallback — always includes specific numbers
