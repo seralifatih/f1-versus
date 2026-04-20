@@ -7,10 +7,14 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
+        userAgent: "Googlebot",
+        allow: ["/", "/api/og/"],
+        disallow: ["/api/", "/_next/"],
+      },
+      {
         userAgent: "*",
         allow: "/",
-        // Disallow Next.js internals and API routes (not useful for crawlers)
-        disallow: ["/api/", "/_next/", "/api/og/"],
+        disallow: ["/api/", "/_next/", "/api/og/", "/embed/"],
       },
     ],
     sitemap: `${BASE_URL}/sitemap.xml`,
