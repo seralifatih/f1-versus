@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
+import { getDB, hasDB } from "@/lib/db/client";
 import { computeComparison } from "@/lib/comparison/compute";
 import {
   parseComparisonSlug,
@@ -93,69 +93,52 @@ function legendSlug(a: string, b: string): string {
 }
 
 export async function generateStaticParams(): Promise<{ slug: string }[]> {
-  if (!hasPublicSupabaseConfig()) {
-    return [];
-  }
+  if (!hasDB()) return [];
 
-  const supabase = createServerClient();
+  const db = getDB();
   const currentYear = new Date().getFullYear();
 
-  const [{ data: comparisonRows, error: comparisonError }, { data: currentResults }] =
-    await Promise.all([
-      supabase
-        .from("driver_comparisons")
-        .select("slug, driver_a_id, driver_b_id, stats_json")
-        .is("season", null)
-        .limit(800),
-      supabase
-        .from("results")
-        .select("driver_id, races!inner(season)")
-        .eq("races.season", currentYear)
-        .eq("is_sprint", false),
-    ]);
+  const [{ results: comparisonRows }, { results: currentResults }] = await Promise.all([
+    db.prepare(
+      `SELECT slug, driver_a_id, driver_b_id, stats_json FROM driver_comparisons WHERE season IS NULL LIMIT 800`
+    ).all<{ slug: string; driver_a_id: string; driver_b_id: string; stats_json: string | null }>(),
 
-  if (comparisonError || !comparisonRows) return [];
+    db.prepare(
+      `SELECT DISTINCT r.driver_id FROM results r
+       JOIN races rc ON rc.id = r.race_id
+       WHERE rc.season = ? AND r.is_sprint = 0`
+    ).bind(currentYear).all<{ driver_id: string }>(),
+  ]);
 
-  const currentDriverIds = new Set(
-    (currentResults ?? []).map((result: { driver_id: string }) => result.driver_id)
-  );
+  if (comparisonRows.length === 0) return [];
 
-  type StaticParamRow = {
-    slug: string | null;
-    driver_a_id: string;
-    driver_b_id: string;
-    stats_json: {
-      statsA?: { wins?: number };
-      statsB?: { wins?: number };
-    } | null;
-  };
+  const currentDriverIds = new Set(currentResults.map((r) => r.driver_id));
 
-  const scoreRow = (row: StaticParamRow): number => {
+  const scoreRow = (row: { slug: string; driver_a_id: string; driver_b_id: string; stats_json: string | null }): number => {
     const isCurrentA = currentDriverIds.has(row.driver_a_id);
     const isCurrentB = currentDriverIds.has(row.driver_b_id);
     const currentBoost = isCurrentA && isCurrentB ? 1000 : isCurrentA || isCurrentB ? 500 : 0;
-    const combinedWins =
-      (row.stats_json?.statsA?.wins ?? 0) + (row.stats_json?.statsB?.wins ?? 0);
+    let combinedWins = 0;
+    if (row.stats_json) {
+      try {
+        const parsed = JSON.parse(row.stats_json) as { statsA?: { wins?: number }; statsB?: { wins?: number } };
+        combinedWins = (parsed.statsA?.wins ?? 0) + (parsed.statsB?.wins ?? 0);
+      } catch { /* ignore */ }
+    }
     return currentBoost + combinedWins;
   };
 
-  // Build guaranteed legend slugs that exist in the DB
   const legendSlugs = new Set(LEGEND_PAIRS.map(([a, b]) => legendSlug(a, b)));
-  const dbSlugs = new Set(
-    (comparisonRows as StaticParamRow[]).filter((r) => r.slug).map((r) => r.slug as string)
-  );
+  const dbSlugs = new Set(comparisonRows.filter((r) => r.slug).map((r) => r.slug));
   const guaranteedSlugs = [...legendSlugs].filter((s) => dbSlugs.has(s));
 
-  // Remaining rows sorted by score, excluding already-guaranteed pairs
-  const ranked = (comparisonRows as StaticParamRow[])
-    .filter((row) => row.slug && !legendSlugs.has(row.slug as string))
+  const ranked = comparisonRows
+    .filter((row) => row.slug && !legendSlugs.has(row.slug))
     .sort((a, b) => scoreRow(b) - scoreRow(a))
     .slice(0, 400 - guaranteedSlugs.length)
-    .map((row) => row.slug as string);
+    .map((row) => row.slug);
 
-  const allSlugs = [...guaranteedSlugs, ...ranked];
-
-  return allSlugs.map((slug) => ({ slug }));
+  return [...guaranteedSlugs, ...ranked].map((slug) => ({ slug }));
 }
 
 // ─── Metadata ──────────────────────────────────────────────────────────────
@@ -170,41 +153,22 @@ export async function generateMetadata({
 
   const canonicalSlug = buildComparisonSlug(parsed.driverARef, parsed.driverBRef);
 
-  if (!hasPublicSupabaseConfig()) {
+  if (!hasDB()) {
     const fallbackNameA = parsed.driverARef.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     const fallbackNameB = parsed.driverBRef.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    const title = `${fallbackNameA} vs ${fallbackNameB} - F1 Driver Comparison | F1-Versus`;
-    const description = `Head-to-head F1 stats: ${fallbackNameA} vs ${fallbackNameB}. Wins, poles, podiums, consistency score, teammate battles, and more across every season of Formula 1.`;
-
     return {
-      title,
-      description,
-      alternates: {
-        canonical: `/compare/${canonicalSlug}`,
-      },
+      title: `${fallbackNameA} vs ${fallbackNameB} - F1 Driver Comparison | F1-Versus`,
+      description: `Head-to-head F1 stats: ${fallbackNameA} vs ${fallbackNameB}. Wins, poles, podiums, consistency score, teammate battles, and more.`,
+      alternates: { canonical: `/compare/${canonicalSlug}` },
     };
   }
 
-  const supabase = createServerClient();
+  const db = getDB();
 
-  // Fetch driver names + pre-computed stats for a stats-rich description
-  const [{ data: dA }, { data: dB }, { data: cached }] = await Promise.all([
-    supabase
-      .from("drivers")
-      .select("first_name, last_name")
-      .eq("driver_ref", parsed.driverARef)
-      .single(),
-    supabase
-      .from("drivers")
-      .select("first_name, last_name")
-      .eq("driver_ref", parsed.driverBRef)
-      .single(),
-    supabase
-      .from("driver_comparisons")
-      .select("stats_json")
-      .eq("slug", canonicalSlug)
-      .is("season", null)
-      .single(),
+  const [dA, dB, cached] = await Promise.all([
+    db.prepare(`SELECT first_name, last_name FROM drivers WHERE driver_ref = ?`).bind(parsed.driverARef).first<{ first_name: string; last_name: string }>(),
+    db.prepare(`SELECT first_name, last_name FROM drivers WHERE driver_ref = ?`).bind(parsed.driverBRef).first<{ first_name: string; last_name: string }>(),
+    db.prepare(`SELECT stats_json FROM driver_comparisons WHERE slug = ? AND season IS NULL`).bind(canonicalSlug).first<{ stats_json: string | null }>(),
   ]);
 
   const nameA = dA ? `${dA.first_name} ${dA.last_name}` : parsed.driverARef;
@@ -212,7 +176,6 @@ export async function generateMetadata({
 
   const title = `${nameA} vs ${nameB} — F1 Driver Comparison | F1-Versus`;
 
-  // Build a stats-specific description if we have pre-computed data
   let description: string;
   if (cached?.stats_json) {
     type StatsShape = {
@@ -220,7 +183,8 @@ export async function generateMetadata({
       statsB: { wins: number; poles: number; podiums: number };
       headToHead: { totalRaces: number; driverAWins: number; driverBWins: number };
     };
-    const s = cached.stats_json as StatsShape;
+    let s: StatsShape;
+    try { s = JSON.parse(cached.stats_json) as StatsShape; } catch { s = { statsA: { wins: 0, poles: 0, podiums: 0 }, statsB: { wins: 0, poles: 0, podiums: 0 }, headToHead: { totalRaces: 0, driverAWins: 0, driverBWins: 0 } }; }
     const winsLeader = s.statsA.wins >= s.statsB.wins ? nameA : nameB;
     const winsMax = Math.max(s.statsA.wins, s.statsB.wins);
     const winsMin = Math.min(s.statsA.wins, s.statsB.wins);
@@ -264,55 +228,55 @@ export async function generateMetadata({
 // ─── Data Fetching ─────────────────────────────────────────────────────────
 
 async function getOrComputeComparison(slug: string): Promise<ComparisonResult | null> {
-  const supabase = createServerClient();
+  const db = getDB();
   const parsed = parseComparisonSlug(slug);
   if (!parsed) return null;
 
-  // Resolve driver UUIDs
-  const [{ data: dA }, { data: dB }] = await Promise.all([
-    supabase.from("drivers").select("id, driver_ref").eq("driver_ref", parsed.driverARef).single(),
-    supabase.from("drivers").select("id, driver_ref").eq("driver_ref", parsed.driverBRef).single(),
+  const [dA, dB] = await Promise.all([
+    db.prepare(`SELECT id, driver_ref FROM drivers WHERE driver_ref = ?`).bind(parsed.driverARef).first<{ id: string; driver_ref: string }>(),
+    db.prepare(`SELECT id, driver_ref FROM drivers WHERE driver_ref = ?`).bind(parsed.driverBRef).first<{ id: string; driver_ref: string }>(),
   ]);
   if (!dA || !dB) return null;
 
-  // Try pre-computed first
-  const { data: cached } = await supabase
-    .from("driver_comparisons")
-    .select("stats_json")
-    .is("season", null)
-    .or(
-      `and(driver_a_id.eq.${dA.id},driver_b_id.eq.${dB.id}),and(driver_a_id.eq.${dB.id},driver_b_id.eq.${dA.id})`
+  const cached = await db
+    .prepare(
+      `SELECT stats_json FROM driver_comparisons
+       WHERE season IS NULL
+         AND ((driver_a_id = ? AND driver_b_id = ?) OR (driver_a_id = ? AND driver_b_id = ?))`
     )
-    .single();
+    .bind(dA.id, dB.id, dB.id, dA.id)
+    .first<{ stats_json: string | null }>();
 
   if (cached?.stats_json) {
-    return cached.stats_json as ComparisonResult;
+    try { return JSON.parse(cached.stats_json) as ComparisonResult; } catch { /* fall through */ }
   }
 
-  // On-demand computation — runs at request time, cached by ISR afterwards
   try {
     const result = await computeComparison(dA.id, dB.id);
-
-    // Store for future requests (best-effort — don't fail if this errors)
     const canonicalSlug = buildComparisonSlug(parsed.driverARef, parsed.driverBRef);
     const aIsCanonical = parsed.driverARef.localeCompare(parsed.driverBRef) <= 0;
+    const ts = new Date().toISOString();
+    const statsJson = JSON.stringify(result);
     try {
-      await supabase.from("driver_comparisons").upsert(
-        {
-          driver_a_id: aIsCanonical ? dA.id : dB.id,
-          driver_b_id: aIsCanonical ? dB.id : dA.id,
-          slug: canonicalSlug,
-          season: null,
-          stats_json: result,
-          computed_stats: result,
-          last_computed_at: new Date().toISOString(),
-        },
-        { onConflict: "driver_a_id,driver_b_id,season" }
-      );
-    } catch {
-      // Best-effort cache write; the page can still render from the fresh result.
-    }
-
+      await db
+        .prepare(
+          `INSERT INTO driver_comparisons (id, driver_a_id, driver_b_id, slug, season, stats_json, computed_stats, last_computed_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+           ON CONFLICT (driver_a_id, driver_b_id, season) DO UPDATE SET
+             stats_json = excluded.stats_json, computed_stats = excluded.computed_stats,
+             last_computed_at = excluded.last_computed_at, updated_at = excluded.updated_at`
+        )
+        .bind(
+          crypto.randomUUID(),
+          aIsCanonical ? dA.id : dB.id,
+          aIsCanonical ? dB.id : dA.id,
+          canonicalSlug,
+          statsJson,
+          statsJson,
+          ts, ts, ts
+        )
+        .run();
+    } catch { /* best-effort cache write */ }
     return result;
   } catch {
     return null;
@@ -323,38 +287,32 @@ async function getTeamColors(
   driverARef: string,
   driverBRef: string
 ): Promise<{ colorA: string; colorB: string }> {
-  const supabase = createServerClient();
+  const db = getDB();
 
-  // Find the most recent constructor for each driver
-  const [{ data: conA }, { data: conB }] = await Promise.all([
-    supabase
-      .from("results")
-      .select("constructor:constructors(constructor_ref, color_hex)")
-      .eq("driver_id", (
-        await supabase.from("drivers").select("id").eq("driver_ref", driverARef).single()
-      ).data?.id ?? "")
-      .order("race_id", { ascending: false })
-      .limit(1)
-      .single(),
-    supabase
-      .from("results")
-      .select("constructor:constructors(constructor_ref, color_hex)")
-      .eq("driver_id", (
-        await supabase.from("drivers").select("id").eq("driver_ref", driverBRef).single()
-      ).data?.id ?? "")
-      .order("race_id", { ascending: false })
-      .limit(1)
-      .single(),
+  const [rowA, rowB] = await Promise.all([
+    db.prepare(
+      `SELECT c.constructor_ref, c.color_hex
+       FROM results r
+       JOIN constructors c ON c.id = r.constructor_id
+       JOIN drivers d ON d.id = r.driver_id
+       WHERE d.driver_ref = ? AND r.is_sprint = 0
+       ORDER BY r.race_id DESC LIMIT 1`
+    ).bind(driverARef).first<{ constructor_ref: string; color_hex: string | null }>(),
+
+    db.prepare(
+      `SELECT c.constructor_ref, c.color_hex
+       FROM results r
+       JOIN constructors c ON c.id = r.constructor_id
+       JOIN drivers d ON d.id = r.driver_id
+       WHERE d.driver_ref = ? AND r.is_sprint = 0
+       ORDER BY r.race_id DESC LIMIT 1`
+    ).bind(driverBRef).first<{ constructor_ref: string; color_hex: string | null }>(),
   ]);
 
-  type ConstructorRow = { constructor_ref: string; color_hex: string | null };
-  const consA = conA?.constructor as unknown as ConstructorRow | null;
-  const consB = conB?.constructor as unknown as ConstructorRow | null;
-
-  const colorA = consA?.color_hex ?? getTeamColor(consA?.constructor_ref ?? "") ?? "#e10600";
-  const colorB = consB?.color_hex ?? getTeamColor(consB?.constructor_ref ?? "") ?? "#3b82f6";
-
-  return { colorA, colorB };
+  return {
+    colorA: rowA?.color_hex ?? getTeamColor(rowA?.constructor_ref ?? "") ?? "#e10600",
+    colorB: rowB?.color_hex ?? getTeamColor(rowB?.constructor_ref ?? "") ?? "#3b82f6",
+  };
 }
 
 // ─── Circuit breakdown data ─────────────────────────────────────────────────
@@ -363,180 +321,83 @@ async function getCircuitBreakdowns(
   driverARef: string,
   driverBRef: string
 ): Promise<CircuitBreakdownRow[]> {
-  const supabase = createServerClient();
+  const db = getDB();
 
-  // Resolve driver IDs
-  const [{ data: dA }, { data: dB }] = await Promise.all([
-    supabase.from("drivers").select("id").eq("driver_ref", driverARef).single(),
-    supabase.from("drivers").select("id").eq("driver_ref", driverBRef).single(),
+  const [dA, dB] = await Promise.all([
+    db.prepare(`SELECT id FROM drivers WHERE driver_ref = ?`).bind(driverARef).first<{ id: string }>(),
+    db.prepare(`SELECT id FROM drivers WHERE driver_ref = ?`).bind(driverBRef).first<{ id: string }>(),
   ]);
   if (!dA || !dB) return [];
 
-  // Fetch all non-sprint results for both drivers, with circuit + weather join
-  const [{ data: resA }, { data: resB }] = await Promise.all([
-    supabase
-      .from("results")
-      .select(
-        `position, grid, points, status, fastest_lap_rank,
-         race:races!inner(id, season, round, name, date,
-           circuit:circuits(id, circuit_ref, name, country, type),
-           weather_conditions(wet))`
-      )
-      .eq("driver_id", dA.id)
-      .eq("is_sprint", false),
-    supabase
-      .from("results")
-      .select(
-        `position, grid, points, status, fastest_lap_rank,
-         race:races!inner(id, season, round, name, date,
-           circuit:circuits(id, circuit_ref, name, country, type),
-           weather_conditions(wet))`
-      )
-      .eq("driver_id", dB.id)
-      .eq("is_sprint", false),
-  ]);
-
-  // Fetch qualifying for both drivers
-  const allRaceIdsA = new Set<string>();
-  const allRaceIdsB = new Set<string>();
-
-  type RawResult = {
-    position: number | null;
-    grid: number | null;
-    points: number;
-    status: string | null;
-    fastest_lap_rank: number | null;
-    race: {
-      id: string;
-      season: number;
-      round: number;
-      name: string;
-      date: string;
-      circuit: { id: string; circuit_ref: string; name: string; country: string | null; type: "street" | "permanent" | null } | null;
-      weather_conditions: { wet: boolean } | null;
-    };
+  type FlatResult = {
+    race_id: string; season: number; round: number; race_name: string; date: string;
+    circuit_ref: string; circuit_name: string; circuit_country: string | null; circuit_type: "street" | "permanent" | null;
+    weather_wet: number | null;
+    position: number | null; grid: number | null; points: number; status: string | null; fastest_lap_rank: number | null;
   };
 
-  const rowsA = (resA ?? []) as unknown as RawResult[];
-  const rowsB = (resB ?? []) as unknown as RawResult[];
+  const resultSql = `
+    SELECT rc.id AS race_id, rc.season, rc.round, rc.name AS race_name, rc.date,
+           c.circuit_ref, c.name AS circuit_name, c.country AS circuit_country, c.type AS circuit_type,
+           w.wet AS weather_wet,
+           r.position, r.grid, r.points, r.status, r.fastest_lap_rank
+    FROM results r
+    JOIN races rc ON rc.id = r.race_id
+    LEFT JOIN circuits c ON c.id = rc.circuit_id
+    LEFT JOIN weather_conditions w ON w.race_id = rc.id
+    WHERE r.driver_id = ? AND r.is_sprint = 0`;
 
-  for (const r of rowsA) allRaceIdsA.add(r.race.id);
-  for (const r of rowsB) allRaceIdsB.add(r.race.id);
+  const [{ results: rowsA }, { results: rowsB }] = await Promise.all([
+    db.prepare(resultSql).bind(dA.id).all<FlatResult>(),
+    db.prepare(resultSql).bind(dB.id).all<FlatResult>(),
+  ]);
 
-  const allRaceIds = Array.from(new Set([...allRaceIdsA, ...allRaceIdsB]));
+  const allRaceIds = Array.from(new Set([...rowsA.map((r) => r.race_id), ...rowsB.map((r) => r.race_id)]));
   if (allRaceIds.length === 0) return [];
 
-  const [{ data: qualiA }, { data: qualiB }] = await Promise.all([
-    supabase
-      .from("qualifying")
-      .select("race_id, position")
-      .eq("driver_id", dA.id)
-      .in("race_id", allRaceIds),
-    supabase
-      .from("qualifying")
-      .select("race_id, position")
-      .eq("driver_id", dB.id)
-      .in("race_id", allRaceIds),
+  const raceIdPlaceholders = allRaceIds.map(() => "?").join(", ");
+
+  const [{ results: qualiA }, { results: qualiB }] = await Promise.all([
+    db.prepare(`SELECT race_id, position FROM qualifying WHERE driver_id = ? AND race_id IN (${raceIdPlaceholders})`).bind(dA.id, ...allRaceIds).all<{ race_id: string; position: number | null }>(),
+    db.prepare(`SELECT race_id, position FROM qualifying WHERE driver_id = ? AND race_id IN (${raceIdPlaceholders})`).bind(dB.id, ...allRaceIds).all<{ race_id: string; position: number | null }>(),
   ]);
 
-  const qualiMapA = new Map((qualiA ?? []).map((q: { race_id: string; position: number | null }) => [q.race_id, q.position]));
-  const qualiMapB = new Map((qualiB ?? []).map((q: { race_id: string; position: number | null }) => [q.race_id, q.position]));
+  const qualiMapA = new Map(qualiA.map((q) => [q.race_id, q.position]));
+  const qualiMapB = new Map(qualiB.map((q) => [q.race_id, q.position]));
 
-  // Group by circuit
   type CircuitAccum = {
-    circuitRef: string;
-    circuitName: string;
-    country: string | null;
-    type: "street" | "permanent" | null;
-    racesA: CircuitBreakdownRow["racesA"];
-    racesB: CircuitBreakdownRow["racesB"];
+    circuitRef: string; circuitName: string; country: string | null; type: "street" | "permanent" | null;
+    racesA: CircuitBreakdownRow["racesA"]; racesB: CircuitBreakdownRow["racesB"];
   };
-
   const byCircuit = new Map<string, CircuitAccum>();
 
-  function getOrCreate(circuit: NonNullable<RawResult["race"]["circuit"]>): CircuitAccum {
-    if (!byCircuit.has(circuit.circuit_ref)) {
-      byCircuit.set(circuit.circuit_ref, {
-        circuitRef: circuit.circuit_ref,
-        circuitName: circuit.name,
-        country: circuit.country,
-        type: circuit.type,
-        racesA: [],
-        racesB: [],
-      });
+  function getOrCreate(r: FlatResult): CircuitAccum {
+    if (!byCircuit.has(r.circuit_ref)) {
+      byCircuit.set(r.circuit_ref, { circuitRef: r.circuit_ref, circuitName: r.circuit_name, country: r.circuit_country, type: r.circuit_type, racesA: [], racesB: [] });
     }
-    return byCircuit.get(circuit.circuit_ref)!;
+    return byCircuit.get(r.circuit_ref)!;
   }
 
   for (const r of rowsA) {
-    if (!r.race.circuit) continue;
-    const acc = getOrCreate(r.race.circuit);
-    acc.racesA.push({
-      season: r.race.season,
-      round: r.race.round,
-      raceName: r.race.name,
-      date: r.race.date,
-      position: r.position,
-      grid: r.grid,
-      points: r.points,
-      status: r.status,
-      qualiPosition: qualiMapA.get(r.race.id) ?? null,
-      wet: r.race.weather_conditions?.wet ?? false,
-    });
+    if (!r.circuit_ref) continue;
+    getOrCreate(r).racesA.push({ season: r.season, round: r.round, raceName: r.race_name, date: r.date, position: r.position, grid: r.grid, points: r.points, status: r.status, qualiPosition: qualiMapA.get(r.race_id) ?? null, wet: r.weather_wet === 1 });
   }
-
   for (const r of rowsB) {
-    if (!r.race.circuit) continue;
-    const acc = getOrCreate(r.race.circuit);
-    acc.racesB.push({
-      season: r.race.season,
-      round: r.race.round,
-      raceName: r.race.name,
-      date: r.race.date,
-      position: r.position,
-      grid: r.grid,
-      points: r.points,
-      status: r.status,
-      qualiPosition: qualiMapB.get(r.race.id) ?? null,
-      wet: r.race.weather_conditions?.wet ?? false,
-    });
+    if (!r.circuit_ref) continue;
+    getOrCreate(r).racesB.push({ season: r.season, round: r.round, raceName: r.race_name, date: r.date, position: r.position, grid: r.grid, points: r.points, status: r.status, qualiPosition: qualiMapB.get(r.race_id) ?? null, wet: r.weather_wet === 1 });
   }
 
   function computeStats(races: CircuitBreakdownRow["racesA"]): CircuitBreakdownStats {
     const finishes = races.filter((r) => r.position !== null);
-    const avgFinish =
-      finishes.length > 0
-        ? finishes.reduce((s, r) => s + r.position!, 0) / finishes.length
-        : null;
-    const bestFinish =
-      finishes.length > 0
-        ? Math.min(...finishes.map((r) => r.position!))
-        : null;
-    return {
-      races: races.length,
-      wins: races.filter((r) => r.position === 1).length,
-      podiums: races.filter((r) => r.position !== null && r.position <= 3).length,
-      poles: races.filter((r) => r.qualiPosition === 1).length,
-      bestFinish,
-      avgFinish,
-      dnfs: races.filter((r) => r.position === null).length,
-    };
+    const avgFinish = finishes.length > 0 ? finishes.reduce((s, r) => s + r.position!, 0) / finishes.length : null;
+    const bestFinish = finishes.length > 0 ? Math.min(...finishes.map((r) => r.position!)) : null;
+    return { races: races.length, wins: races.filter((r) => r.position === 1).length, podiums: races.filter((r) => r.position !== null && r.position <= 3).length, poles: races.filter((r) => r.qualiPosition === 1).length, bestFinish, avgFinish, dnfs: races.filter((r) => r.position === null).length };
   }
 
-  // Only include circuits where at least one driver has raced
   return Array.from(byCircuit.values())
     .filter((c) => c.racesA.length > 0 || c.racesB.length > 0)
-    .map((c) => ({
-      ...c,
-      racesA: c.racesA.sort((a, b) => b.season - a.season),
-      racesB: c.racesB.sort((a, b) => b.season - a.season),
-      statsA: computeStats(c.racesA),
-      statsB: computeStats(c.racesB),
-    }))
-    .sort((a, b) =>
-      Math.max(b.statsA.races, b.statsB.races) -
-      Math.max(a.statsA.races, a.statsB.races)
-    );
+    .map((c) => ({ ...c, racesA: c.racesA.sort((a, b) => b.season - a.season), racesB: c.racesB.sort((a, b) => b.season - a.season), statsA: computeStats(c.racesA), statsB: computeStats(c.racesB) }))
+    .sort((a, b) => Math.max(b.statsA.races, b.statsB.races) - Math.max(a.statsA.races, a.statsB.races));
 }
 
 // ─── Related comparisons ───────────────────────────────────────────────────
@@ -555,80 +416,67 @@ async function getRelatedComparisons(
   driverBRef: string,
   currentSlug: string
 ): Promise<RelatedComparison[]> {
-  const supabase = createServerClient();
+  const db = getDB();
 
-  // Resolve both driver IDs
-  const [{ data: dA }, { data: dB }] = await Promise.all([
-    supabase.from("drivers").select("id").eq("driver_ref", driverARef).single(),
-    supabase.from("drivers").select("id").eq("driver_ref", driverBRef).single(),
+  const [dA, dB] = await Promise.all([
+    db.prepare(`SELECT id FROM drivers WHERE driver_ref = ?`).bind(driverARef).first<{ id: string }>(),
+    db.prepare(`SELECT id FROM drivers WHERE driver_ref = ?`).bind(driverBRef).first<{ id: string }>(),
   ]);
   if (!dA || !dB) return [];
 
-  // Comparisons that include either driver (but not the current one)
-  const { data: rows } = await supabase
-    .from("driver_comparisons")
-    .select(
-      `slug,
-       driver_a:drivers!driver_comparisons_driver_a_id_fkey(driver_ref, first_name, last_name),
-       driver_b:drivers!driver_comparisons_driver_b_id_fkey(driver_ref, first_name, last_name)`
+  const { results: rows } = await db
+    .prepare(
+      `SELECT dc.slug,
+              da.driver_ref AS a_ref, da.first_name AS a_first, da.last_name AS a_last,
+              db.driver_ref AS b_ref, db.first_name AS b_first, db.last_name AS b_last
+       FROM driver_comparisons dc
+       JOIN drivers da ON da.id = dc.driver_a_id
+       JOIN drivers db ON db.id = dc.driver_b_id
+       WHERE dc.season IS NULL AND dc.slug != ?
+         AND (dc.driver_a_id IN (?, ?) OR dc.driver_b_id IN (?, ?))
+       LIMIT 20`
     )
-    .is("season", null)
-    .neq("slug", currentSlug)
-    .or(
-      `driver_a_id.eq.${dA.id},driver_b_id.eq.${dA.id},driver_a_id.eq.${dB.id},driver_b_id.eq.${dB.id}`
-    )
-    .limit(20);
+    .bind(currentSlug, dA.id, dB.id, dA.id, dB.id)
+    .all<{ slug: string; a_ref: string; a_first: string; a_last: string; b_ref: string; b_first: string; b_last: string }>();
 
-  if (!rows || rows.length === 0) return [];
+  if (rows.length === 0) return [];
 
-  type DRow = { driver_ref: string; first_name: string; last_name: string };
-
-  // Prefer comparisons that feature both well-known drivers
-  // — sort by: shares driverA first, then driverB, then others
   const scored = rows
-    .filter((r) => r.slug)
     .map((r) => {
-      const a = r.driver_a as unknown as DRow;
-      const b = r.driver_b as unknown as DRow;
-      const hasA = a.driver_ref === driverARef || b.driver_ref === driverARef;
-      const hasB = a.driver_ref === driverBRef || b.driver_ref === driverBRef;
+      const hasA = r.a_ref === driverARef || r.b_ref === driverARef;
+      const hasB = r.a_ref === driverBRef || r.b_ref === driverBRef;
       return { r, score: (hasA ? 1 : 0) + (hasB ? 1 : 0) };
     })
     .sort((x, y) => y.score - x.score)
     .slice(0, 4);
 
-  // Fetch team colors for related drivers
-  const relatedRefs = scored.flatMap(({ r }) => {
-    const a = r.driver_a as unknown as DRow;
-    const b = r.driver_b as unknown as DRow;
-    return [a.driver_ref, b.driver_ref];
-  });
+  const relatedRefs = scored.flatMap(({ r }) => [r.a_ref, r.b_ref]);
+  const refPlaceholders = relatedRefs.map(() => "?").join(", ");
 
-  const { data: colorRows } = await supabase
-    .from("results")
-    .select("drivers!inner(driver_ref), constructors!inner(color_hex)")
-    .in("drivers.driver_ref", relatedRefs)
-    .eq("is_sprint", false)
-    .order("race_id", { ascending: false });
+  const { results: colorRows } = await db
+    .prepare(
+      `SELECT d.driver_ref, c.color_hex
+       FROM results r
+       JOIN drivers d ON d.id = r.driver_id
+       JOIN constructors c ON c.id = r.constructor_id
+       WHERE d.driver_ref IN (${refPlaceholders}) AND r.is_sprint = 0
+       ORDER BY r.race_id DESC`
+    )
+    .bind(...relatedRefs)
+    .all<{ driver_ref: string; color_hex: string }>();
 
   const colorMap = new Map<string, string>();
-  for (const row of colorRows ?? []) {
-    const ref = (row.drivers as unknown as { driver_ref: string }).driver_ref;
-    const color = (row.constructors as unknown as { color_hex: string }).color_hex;
-    if (!colorMap.has(ref) && color) colorMap.set(ref, color);
+  for (const row of colorRows) {
+    if (!colorMap.has(row.driver_ref) && row.color_hex) colorMap.set(row.driver_ref, row.color_hex);
   }
 
-  return scored.map(({ r }) => {
-    const a = r.driver_a as unknown as DRow;
-    const b = r.driver_b as unknown as DRow;
-    return {
-      slug: r.slug as string,
-      nameA: `${a.first_name} ${a.last_name}`,
-      nameB: `${b.first_name} ${b.last_name}`,
-      colorA: colorMap.get(a.driver_ref) ?? null,
-      colorB: colorMap.get(b.driver_ref) ?? null,
-    };
-  });
+  return scored.map(({ r }) => ({
+    slug: r.slug,
+    nameA: `${r.a_first} ${r.a_last}`,
+    nameB: `${r.b_first} ${r.b_last}`,
+    colorA: colorMap.get(r.a_ref) ?? null,
+    colorB: colorMap.get(r.b_ref) ?? null,
+  }));
 }
 
 // ─── JSON-LD structured data ───────────────────────────────────────────────
@@ -731,7 +579,7 @@ export default async function ComparePage({
 }) {
   const parsed = parseComparisonSlug(params.slug);
   if (!parsed) notFound();
-  if (!hasPublicSupabaseConfig()) notFound();
+  if (!hasDB()) notFound();
 
   // Enforce canonical slug — redirect non-canonical ordering
   const canonical = buildComparisonSlug(parsed.driverARef, parsed.driverBRef);

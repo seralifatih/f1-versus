@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
+import { getDB, hasDB } from "@/lib/db/client";
 import { getSiteUrl } from "@/lib/site-url";
 import { buildTeamSlug } from "@/lib/data/types";
 
@@ -40,80 +40,52 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/terms`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.2 },
   ];
 
-  if (!hasPublicSupabaseConfig()) {
-    return staticPages;
-  }
+  if (!hasDB()) return staticPages;
 
-  const supabase = createServerClient();
+  const db = getDB();
 
-  const { data: drivers } = await supabase.from("drivers").select("driver_ref, updated_at").order("last_name");
+  const [{ results: drivers }, { results: comparisons }, { results: constructors }, { results: teamComps }] =
+    await Promise.all([
+      db.prepare(`SELECT driver_ref, updated_at FROM drivers ORDER BY last_name`).all<{ driver_ref: string; updated_at: string }>(),
+      db.prepare(`SELECT slug, last_computed_at FROM driver_comparisons WHERE season IS NULL ORDER BY last_computed_at DESC`).all<{ slug: string; last_computed_at: string }>(),
+      db.prepare(`SELECT constructor_ref, updated_at FROM constructors ORDER BY constructor_ref`).all<{ constructor_ref: string; updated_at: string }>(),
+      db.prepare(`SELECT slug, last_computed_at FROM constructor_comparisons ORDER BY last_computed_at DESC LIMIT 200`).all<{ slug: string; last_computed_at: string }>(),
+    ]);
 
-  const driverPages: MetadataRoute.Sitemap = (drivers ?? []).map((driver) => ({
-    url: `${BASE_URL}/drivers/${driver.driver_ref}`,
-    lastModified: driver.updated_at ? new Date(driver.updated_at) : new Date(),
+  const driverPages: MetadataRoute.Sitemap = drivers.map((d) => ({
+    url: `${BASE_URL}/drivers/${d.driver_ref}`,
+    lastModified: d.updated_at ? new Date(d.updated_at) : new Date(),
     changeFrequency: "monthly",
     priority: 0.6,
   }));
 
-  const { data: comparisons } = await supabase
-    .from("driver_comparisons")
-    .select("slug, last_computed_at")
-    .is("season", null)
-    .order("last_computed_at", { ascending: false });
-
-  const comparisonPages: MetadataRoute.Sitemap = (comparisons ?? [])
-    .filter((comparison) => comparison.slug)
-    .map((comparison) => ({
-      url: `${BASE_URL}/compare/${comparison.slug}`,
-      lastModified: comparison.last_computed_at ? new Date(comparison.last_computed_at) : new Date(),
+  const comparisonPages: MetadataRoute.Sitemap = comparisons
+    .filter((c) => c.slug)
+    .map((c) => ({
+      url: `${BASE_URL}/compare/${c.slug}`,
+      lastModified: c.last_computed_at ? new Date(c.last_computed_at) : new Date(),
       changeFrequency: "weekly",
       priority: 0.9,
     }));
 
-  // ─── Team pages ──────────────────────────────────────────────────────────
+  const teamPages: MetadataRoute.Sitemap = constructors.map((c) => ({
+    url: `${BASE_URL}/teams/${c.constructor_ref}`,
+    lastModified: c.updated_at ? new Date(c.updated_at) : new Date(),
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
+  }));
 
-  const { data: constructors } = await supabase
-    .from("constructors")
-    .select("constructor_ref, updated_at")
-    .order("constructor_ref");
-
-  const teamPages: MetadataRoute.Sitemap = (constructors ?? []).map(
-    (c: { constructor_ref: string; updated_at?: string }) => ({
-      url: `${BASE_URL}/teams/${c.constructor_ref}`,
-      lastModified: c.updated_at ? new Date(c.updated_at) : new Date(),
-      changeFrequency: "monthly" as const,
-      priority: 0.7,
-    })
-  );
-
-  // ─── Team comparison pages ────────────────────────────────────────────────
-
-  // Hardcoded top rivalries (always indexed)
   const rivalrySlugs = RIVALRY_PAIRS.map(([a, b]) => buildTeamSlug(a, b));
-
-  // Current season team pairs from constructor_comparisons cache (if table exists)
-  const { data: teamComps } = await supabase
-    .from("constructor_comparisons")
-    .select("slug, last_computed_at")
-    .order("last_computed_at", { ascending: false })
-    .limit(200);
-
   const teamCompSlugs = new Set<string>(rivalrySlugs);
-  for (const c of (teamComps ?? []) as { slug: string }[]) {
-    if (c.slug) teamCompSlugs.add(c.slug);
-  }
+  for (const c of teamComps) { if (c.slug) teamCompSlugs.add(c.slug); }
 
-  const teamCompPages: MetadataRoute.Sitemap = Array.from(teamCompSlugs).map((slug) => {
-    const cached = (teamComps ?? []).find((c: { slug: string }) => c.slug === slug);
-    return {
-      url: `${BASE_URL}/compare/teams/${slug}`,
-      lastModified: (cached as { last_computed_at?: string } | undefined)?.last_computed_at
-        ? new Date((cached as { last_computed_at: string }).last_computed_at)
-        : new Date(),
-      changeFrequency: "monthly" as const,
-      priority: 0.85,
-    };
-  });
+  const teamCompMap = new Map(teamComps.map((c) => [c.slug, c.last_computed_at]));
+  const teamCompPages: MetadataRoute.Sitemap = Array.from(teamCompSlugs).map((slug) => ({
+    url: `${BASE_URL}/compare/teams/${slug}`,
+    lastModified: teamCompMap.get(slug) ? new Date(teamCompMap.get(slug)!) : new Date(),
+    changeFrequency: "monthly" as const,
+    priority: 0.85,
+  }));
 
   return [...staticPages, ...driverPages, ...comparisonPages, ...teamPages, ...teamCompPages];
 }

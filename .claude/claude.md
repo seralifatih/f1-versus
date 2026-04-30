@@ -46,7 +46,7 @@ scripts/
 
 ## Key Decisions
 
-- **Static generation is the product.** Every `/compare/[slug]` page is pre-rendered at build time via `generateStaticParams()`. ISR revalidates every 24h. Do NOT make these client-side fetches.
+- **Static generation is the product.** Every `/compare/[slug]` page is pre-rendered at build time via `generateStaticParams()`. All pages use `dynamic = "force-static"` — **no ISR**. Cloudflare Workers has no KV incremental cache wired up, so `revalidate` exports are silently no-ops; weekly redeploy is the real refresh cadence. Do NOT add `revalidate` exports — they don't work and mislead readers.
 - **Comparison slug format:** always `{driverA-ref}-vs-{driverB-ref}` using Jolpica driver refs (e.g., `verstappen-vs-hamilton`). Alphabetical order by last name. Reversed URLs redirect to canonical.
 - **Pre-computed stats:** The `driver_comparisons` table stores a `stats_json` JSONB column with the full ComparisonResult. Pages read from this table, not from raw results at request time.
 - **Team colors come from the `constructors` table** (`color_hex` column). Never hardcode team colors.

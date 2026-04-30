@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
-import { createClient } from "@supabase/supabase-js";
+import { getDB, hasDB } from "@/lib/db/client";
 import { buildComparisonSlug, buildTeamSlug, getTeamColor } from "@/lib/data/types";
 import { DriverSearchBar } from "@/components/home/DriverSearchBar";
 import { AdBanner } from "@/components/ui/AdBanner";
@@ -80,51 +79,24 @@ const TEAM_RIVALRIES = [
 
 // ─── Data fetchers ─────────────────────────────────────────────────────────
 
-function getServiceClient() {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return null;
-  }
-
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
-
 async function getTrendingComparisons(): Promise<TrendingComparison[]> {
-  if (!hasPublicSupabaseConfig()) {
-    return [];
-  }
+  if (!hasDB()) return getFallbackComparisons();
 
-  const supabase = getServiceClient(); // service role needed to read votes
-  if (!supabase) {
-    return getFallbackComparisons();
-  }
-
+  const db = getDB();
   const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Get vote counts per slug in the last 7 days
-  const { data: voteCounts } = await supabase
-    .from("votes")
-    .select("comparison_slug")
-    .gte("created_at", oneWeekAgo);
+  const { results: voteCounts } = await db
+    .prepare(`SELECT comparison_slug FROM votes WHERE created_at >= ?`)
+    .bind(oneWeekAgo)
+    .all<{ comparison_slug: string }>();
 
-  if (!voteCounts || voteCounts.length === 0) {
-    // Fallback: return most recently computed comparisons
-    return getFallbackComparisons();
-  }
+  if (voteCounts.length === 0) return getFallbackComparisons();
 
-  // Aggregate
   const countMap = new Map<string, number>();
   for (const row of voteCounts) {
-    countMap.set(
-      row.comparison_slug,
-      (countMap.get(row.comparison_slug) ?? 0) + 1
-    );
+    countMap.set(row.comparison_slug, (countMap.get(row.comparison_slug) ?? 0) + 1);
   }
 
-  // Top 10 slugs by vote count
   const topSlugs = Array.from(countMap.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
@@ -132,60 +104,61 @@ async function getTrendingComparisons(): Promise<TrendingComparison[]> {
 
   if (topSlugs.length === 0) return getFallbackComparisons();
 
-  // Fetch comparison records + driver data + team colors
-  const publicClient = createServerClient();
-  const { data: comps } = await publicClient
-    .from("driver_comparisons")
-    .select(
-      `slug,
-       driver_a:drivers!driver_comparisons_driver_a_id_fkey(driver_ref, first_name, last_name, headshot_url),
-       driver_b:drivers!driver_comparisons_driver_b_id_fkey(driver_ref, first_name, last_name, headshot_url)`
+  const slugPlaceholders = topSlugs.map(() => "?").join(", ");
+  const { results: comps } = await db
+    .prepare(
+      `SELECT dc.slug,
+              da.driver_ref AS a_ref, da.first_name AS a_first, da.last_name AS a_last, da.headshot_url AS a_headshot,
+              db.driver_ref AS b_ref, db.first_name AS b_first, db.last_name AS b_last, db.headshot_url AS b_headshot
+       FROM driver_comparisons dc
+       JOIN drivers da ON da.id = dc.driver_a_id
+       JOIN drivers db ON db.id = dc.driver_b_id
+       WHERE dc.slug IN (${slugPlaceholders}) AND dc.season IS NULL`
     )
-    .in("slug", topSlugs)
-    .is("season", null);
+    .bind(...topSlugs)
+    .all<{
+      slug: string;
+      a_ref: string; a_first: string; a_last: string; a_headshot: string | null;
+      b_ref: string; b_first: string; b_last: string; b_headshot: string | null;
+    }>();
 
-  if (!comps) return getFallbackComparisons();
-
-  // Fetch team colors for these drivers
-  type DriverRow = { driver_ref: string; first_name: string; last_name: string; headshot_url: string | null };
-  const driverRefs = comps.flatMap((c) => [
-    (c.driver_a as unknown as DriverRow).driver_ref,
-    (c.driver_b as unknown as DriverRow).driver_ref,
-  ]);
-
-  const { data: colorRows } = await publicClient
-    .from("results")
-    .select(
-      `drivers!inner(driver_ref),
-       constructors!inner(color_hex)`
-    )
-    .in("drivers.driver_ref", driverRefs)
-    .eq("is_sprint", false)
-    .order("race_id", { ascending: false });
-
+  // Fetch last known team color per driver
+  const allRefs = comps.flatMap((c) => [c.a_ref, c.b_ref]);
   const colorByDriver = new Map<string, string>();
-  for (const row of colorRows ?? []) {
-    const ref = (row.drivers as unknown as { driver_ref: string }).driver_ref;
-    const color = (row.constructors as unknown as { color_hex: string }).color_hex;
-    if (!colorByDriver.has(ref) && color) colorByDriver.set(ref, color);
+  if (allRefs.length > 0) {
+    const refPlaceholders = allRefs.map(() => "?").join(", ");
+    const { results: colorRows } = await db
+      .prepare(
+        `SELECT d.driver_ref, c.color_hex
+         FROM results r
+         JOIN drivers d ON d.id = r.driver_id
+         JOIN constructors c ON c.id = r.constructor_id
+         WHERE d.driver_ref IN (${refPlaceholders}) AND r.is_sprint = 0
+         ORDER BY r.race_id DESC`
+      )
+      .bind(...allRefs)
+      .all<{ driver_ref: string; color_hex: string }>();
+
+    for (const row of colorRows) {
+      if (!colorByDriver.has(row.driver_ref) && row.color_hex)
+        colorByDriver.set(row.driver_ref, row.color_hex);
+    }
   }
 
   return topSlugs
     .map((slug) => {
       const comp = comps.find((c) => c.slug === slug);
       if (!comp) return null;
-      const dA = comp.driver_a as unknown as DriverRow;
-      const dB = comp.driver_b as unknown as DriverRow;
       return {
         slug,
-        nameA: `${dA.first_name} ${dA.last_name}`,
-        nameB: `${dB.first_name} ${dB.last_name}`,
-        lastNameA: dA.last_name,
-        lastNameB: dB.last_name,
-        headshotA: dA.headshot_url,
-        headshotB: dB.headshot_url,
-        colorA: colorByDriver.get(dA.driver_ref) ?? null,
-        colorB: colorByDriver.get(dB.driver_ref) ?? null,
+        nameA: `${comp.a_first} ${comp.a_last}`,
+        nameB: `${comp.b_first} ${comp.b_last}`,
+        lastNameA: comp.a_last,
+        lastNameB: comp.b_last,
+        headshotA: comp.a_headshot,
+        headshotB: comp.b_headshot,
+        colorA: colorByDriver.get(comp.a_ref) ?? null,
+        colorB: colorByDriver.get(comp.b_ref) ?? null,
         voteCount: countMap.get(slug) ?? 0,
       };
     })
@@ -193,86 +166,79 @@ async function getTrendingComparisons(): Promise<TrendingComparison[]> {
 }
 
 async function getFallbackComparisons(): Promise<TrendingComparison[]> {
-  if (!hasPublicSupabaseConfig()) {
-    return [];
-  }
+  if (!hasDB()) return [];
 
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from("driver_comparisons")
-    .select(
-      `slug,
-       driver_a:drivers!driver_comparisons_driver_a_id_fkey(driver_ref, first_name, last_name, headshot_url),
-       driver_b:drivers!driver_comparisons_driver_b_id_fkey(driver_ref, first_name, last_name, headshot_url)`
+  const db = getDB();
+  const { results } = await db
+    .prepare(
+      `SELECT dc.slug,
+              da.driver_ref AS a_ref, da.first_name AS a_first, da.last_name AS a_last, da.headshot_url AS a_headshot,
+              db.driver_ref AS b_ref, db.first_name AS b_first, db.last_name AS b_last, db.headshot_url AS b_headshot
+       FROM driver_comparisons dc
+       JOIN drivers da ON da.id = dc.driver_a_id
+       JOIN drivers db ON db.id = dc.driver_b_id
+       WHERE dc.season IS NULL
+       ORDER BY dc.last_computed_at DESC
+       LIMIT 10`
     )
-    .is("season", null)
-    .order("last_computed_at", { ascending: false })
-    .limit(10);
+    .all<{
+      slug: string;
+      a_ref: string; a_first: string; a_last: string; a_headshot: string | null;
+      b_ref: string; b_first: string; b_last: string; b_headshot: string | null;
+    }>();
 
-  if (!data) return [];
-
-  type DriverRow = { driver_ref: string; first_name: string; last_name: string; headshot_url: string | null };
-  return data.map((c) => {
-    const dA = c.driver_a as unknown as DriverRow;
-    const dB = c.driver_b as unknown as DriverRow;
-    return {
-      slug: c.slug as string,
-      nameA: `${dA.first_name} ${dA.last_name}`,
-      nameB: `${dB.first_name} ${dB.last_name}`,
-      lastNameA: dA.last_name,
-      lastNameB: dB.last_name,
-      headshotA: dA.headshot_url,
-      headshotB: dB.headshot_url,
-      colorA: null,
-      colorB: null,
-      voteCount: 0,
-    };
-  });
+  return results.map((c) => ({
+    slug: c.slug,
+    nameA: `${c.a_first} ${c.a_last}`,
+    nameB: `${c.b_first} ${c.b_last}`,
+    lastNameA: c.a_last,
+    lastNameB: c.b_last,
+    headshotA: c.a_headshot,
+    headshotB: c.b_headshot,
+    colorA: null,
+    colorB: null,
+    voteCount: 0,
+  }));
 }
 
 async function getDriversForSearch(): Promise<DriverSearchOption[]> {
-  if (!hasPublicSupabaseConfig()) {
-    return [];
-  }
+  if (!hasDB()) return [];
 
-  const supabase = createServerClient();
+  const db = getDB();
   const currentYear = new Date().getFullYear();
 
-  const { data: drivers } = await supabase
-    .from("drivers")
-    .select("id, driver_ref, first_name, last_name, nationality, headshot_url")
-    .order("last_name");
+  const { results: drivers } = await db
+    .prepare(`SELECT id, driver_ref, first_name, last_name, nationality, headshot_url FROM drivers ORDER BY last_name`)
+    .all<{ id: string; driver_ref: string; first_name: string; last_name: string; nationality: string | null; headshot_url: string | null }>();
 
-  if (!drivers) return [];
+  if (drivers.length === 0) return [];
 
-  // Current season drivers
-  const { data: currentResults } = await supabase
-    .from("results")
-    .select("driver_id, races!inner(season)")
-    .eq("races.season", currentYear)
-    .eq("is_sprint", false);
+  const { results: currentResults } = await db
+    .prepare(
+      `SELECT DISTINCT r.driver_id FROM results r
+       JOIN races rc ON rc.id = r.race_id
+       WHERE rc.season = ? AND r.is_sprint = 0`
+    )
+    .bind(currentYear)
+    .all<{ driver_id: string }>();
 
-  const currentIds = new Set(
-    (currentResults ?? []).map((r: { driver_id: number }) => r.driver_id)
-  );
+  const currentIds = new Set(currentResults.map((r) => r.driver_id));
 
   // Most recent team per driver
-  const { data: latestResults } = await supabase
-    .from("results")
-    .select(
-      `driver_id,
-       races!inner(season),
-       constructors(name, color_hex)`
+  const { results: latestResults } = await db
+    .prepare(
+      `SELECT r.driver_id, c.name AS team_name, c.color_hex AS team_color
+       FROM results r
+       JOIN constructors c ON c.id = r.constructor_id
+       JOIN races rc ON rc.id = r.race_id
+       WHERE r.is_sprint = 0
+       ORDER BY rc.season DESC, rc.round DESC`
     )
-    .eq("is_sprint", false)
-    .order("races.season", { ascending: false });
+    .all<{ driver_id: string; team_name: string | null; team_color: string | null }>();
 
-  const teamMap = new Map<number, { name: string | null; color: string | null }>();
-  for (const r of latestResults ?? []) {
-    if (!teamMap.has(r.driver_id)) {
-      const con = Array.isArray(r.constructors) ? r.constructors[0] : r.constructors;
-      teamMap.set(r.driver_id, { name: con?.name ?? null, color: con?.color_hex ?? null });
-    }
+  const teamMap = new Map<string, { name: string | null; color: string | null }>();
+  for (const r of latestResults) {
+    if (!teamMap.has(r.driver_id)) teamMap.set(r.driver_id, { name: r.team_name, color: r.team_color });
   }
 
   const result: DriverSearchOption[] = drivers.map((d) => ({
@@ -286,7 +252,6 @@ async function getDriversForSearch(): Promise<DriverSearchOption[]> {
     is_current: currentIds.has(d.id),
   }));
 
-  // Current drivers first, then alphabetical
   result.sort((a, b) => {
     if (a.is_current && !b.is_current) return -1;
     if (!a.is_current && b.is_current) return 1;
@@ -297,91 +262,55 @@ async function getDriversForSearch(): Promise<DriverSearchOption[]> {
 }
 
 async function getLatestRace(): Promise<LatestRace | null> {
-  if (!hasPublicSupabaseConfig()) {
-    return null;
-  }
+  if (!hasDB()) return null;
 
-  const supabase = createServerClient();
-
+  const db = getDB();
   const today = new Date().toISOString().slice(0, 10);
-  const { data: race } = await supabase
-    .from("races")
-    .select("id, name, season, date, circuit_id")
-    .lte("date", today)
-    .order("date", { ascending: false })
-    .limit(1)
-    .single();
+
+  const race = await db
+    .prepare(`SELECT id, name, season, date FROM races WHERE date <= ? ORDER BY date DESC LIMIT 1`)
+    .bind(today)
+    .first<{ id: string; name: string; season: number; date: string }>();
 
   if (!race) return null;
 
-  const { data: results } = await supabase
-    .from("results")
-    .select(
-      `position,
-       drivers(first_name, last_name),
-       constructors(name, color_hex)`
+  const { results } = await db
+    .prepare(
+      `SELECT r.position, d.first_name, d.last_name, c.name AS team_name, c.color_hex AS team_color
+       FROM results r
+       JOIN drivers d ON d.id = r.driver_id
+       JOIN constructors c ON c.id = r.constructor_id
+       WHERE r.race_id = ? AND r.is_sprint = 0 AND r.position IS NOT NULL
+       ORDER BY r.position ASC LIMIT 5`
     )
-    .eq("race_id", race.id)
-    .eq("is_sprint", false)
-    .not("position", "is", null)
-    .order("position", { ascending: true })
-    .limit(5);
+    .bind(race.id)
+    .all<{ position: number; first_name: string; last_name: string; team_name: string | null; team_color: string | null }>();
 
-  if (!results) return null;
+  const topFinishers = results.map((r) => ({
+    position: r.position,
+    firstName: r.first_name,
+    lastName: r.last_name,
+    teamName: r.team_name,
+    teamColor: r.team_color,
+  }));
 
-  type RRow = {
-    position: number;
-    drivers: { first_name: string; last_name: string } | null;
-    constructors: { name: string; color_hex: string | null } | null;
-  };
-
-  const topFinishers = (results as unknown as RRow[])
-    .filter((r) => r.drivers)
-    .map((r) => ({
-      position: r.position,
-      firstName: r.drivers!.first_name,
-      lastName: r.drivers!.last_name,
-      teamName: r.constructors?.name ?? null,
-      teamColor: r.constructors?.color_hex ?? null,
-    }));
-
-  return {
-    name: race.name,
-    season: race.season,
-    date: race.date,
-    topFinishers,
-  };
+  return { name: race.name, season: race.season, date: race.date, topFinishers };
 }
 
 async function getSiteStats(): Promise<SiteStats> {
-  if (!hasPublicSupabaseConfig()) {
-    return { comparisons: 0, votes: 0, drivers: 0 };
-  }
+  if (!hasDB()) return { comparisons: 0, votes: 0, drivers: 0 };
 
-  const supabase = createServerClient();
-  const serviceClient = getServiceClient();
-
-  const [
-    { count: comparisons },
-    votesResult,
-    { count: drivers },
-  ] = await Promise.all([
-    supabase
-      .from("driver_comparisons")
-      .select("id", { count: "exact", head: true })
-      .is("season", null),
-    serviceClient
-      ? serviceClient.from("votes").select("id", { count: "exact", head: true })
-      : Promise.resolve({ count: 0 }),
-    supabase
-      .from("drivers")
-      .select("id", { count: "exact", head: true }),
+  const db = getDB();
+  const [compsRow, votesRow, driversRow] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) AS n FROM driver_comparisons WHERE season IS NULL`).first<{ n: number }>(),
+    db.prepare(`SELECT COUNT(*) AS n FROM votes`).first<{ n: number }>(),
+    db.prepare(`SELECT COUNT(*) AS n FROM drivers`).first<{ n: number }>(),
   ]);
 
   return {
-    comparisons: comparisons ?? 0,
-    votes: votesResult.count ?? 0,
-    drivers: drivers ?? 0,
+    comparisons: compsRow?.n ?? 0,
+    votes: votesRow?.n ?? 0,
+    drivers: driversRow?.n ?? 0,
   };
 }
 

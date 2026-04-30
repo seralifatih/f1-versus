@@ -159,41 +159,30 @@ async function callGroq(comparison: ComparisonResult): Promise<string> {
 // ─── Cache helpers (Supabase read/write) ──────────────────────────────────
 
 async function readCachedSummary(slug: string): Promise<string | null> {
-  // Dynamic import so scripts that import this module without a Supabase
-  // environment still work (compute-comparisons.ts uses its own client).
-  const { createServiceRoleClient } = await import("../supabase/client");
-  const supabase = createServiceRoleClient();
+  const { getDB } = await import("../db/client");
+  const db = getDB();
 
-  const { data } = await supabase
-    .from("driver_comparisons")
-    .select("ai_summary, ai_summary_generated_at")
-    .eq("slug", slug)
-    .is("season", null)
-    .single();
+  const row = await db
+    .prepare(`SELECT ai_summary, ai_summary_generated_at FROM driver_comparisons WHERE slug = ? AND season IS NULL`)
+    .bind(slug)
+    .first<{ ai_summary: string | null; ai_summary_generated_at: string | null }>();
 
-  if (!data?.ai_summary || !data.ai_summary_generated_at) return null;
+  if (!row?.ai_summary || !row.ai_summary_generated_at) return null;
 
-  const age = Date.now() - new Date(data.ai_summary_generated_at as string).getTime();
+  const age = Date.now() - new Date(row.ai_summary_generated_at).getTime();
   if (age > CACHE_TTL_MS) return null;
 
-  return data.ai_summary as string;
+  return row.ai_summary;
 }
 
-async function writeCachedSummary(
-  slug: string,
-  summary: string
-): Promise<void> {
-  const { createServiceRoleClient } = await import("../supabase/client");
-  const supabase = createServiceRoleClient();
+async function writeCachedSummary(slug: string, summary: string): Promise<void> {
+  const { getDB } = await import("../db/client");
+  const db = getDB();
 
-  await supabase
-    .from("driver_comparisons")
-    .update({
-      ai_summary: summary,
-      ai_summary_generated_at: new Date().toISOString(),
-    })
-    .eq("slug", slug)
-    .is("season", null);
+  await db
+    .prepare(`UPDATE driver_comparisons SET ai_summary = ?, ai_summary_generated_at = ? WHERE slug = ? AND season IS NULL`)
+    .bind(summary, new Date().toISOString(), slug)
+    .run();
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────

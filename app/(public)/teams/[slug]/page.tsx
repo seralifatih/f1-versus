@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
+import { getDB, hasDB } from "@/lib/db/client";
 import { getTeamColor, buildTeamSlug } from "@/lib/data/types";
 import { computeTeamStats } from "@/lib/comparison/team-compute";
 import type { TeamStats, TeamSeasonStats, TeamDriverEntry } from "@/lib/data/types";
@@ -13,15 +13,10 @@ export const dynamic = "force-static";
 // ─── Static params ─────────────────────────────────────────────────────────
 
 export async function generateStaticParams(): Promise<{ slug: string }[]> {
-  if (!hasPublicSupabaseConfig()) return [];
-  const supabase = createServerClient();
-
-  // All constructors that have appeared in at least one race result
-  const { data: refs } = await supabase
-    .from("constructors")
-    .select("constructor_ref");
-
-  return (refs ?? []).map((r: { constructor_ref: string }) => ({ slug: r.constructor_ref }));
+  if (!hasDB()) return [];
+  const db = getDB();
+  const { results } = await db.prepare(`SELECT constructor_ref FROM constructors`).all<{ constructor_ref: string }>();
+  return results.map((r) => ({ slug: r.constructor_ref }));
 }
 
 // ─── Metadata ──────────────────────────────────────────────────────────────
@@ -29,12 +24,12 @@ export async function generateStaticParams(): Promise<{ slug: string }[]> {
 export async function generateMetadata(
   { params }: { params: { slug: string } }
 ): Promise<Metadata> {
-  const supabase = createServerClient();
-  const { data: con } = await supabase
-    .from("constructors")
-    .select("name, constructor_ref")
-    .eq("constructor_ref", params.slug)
-    .single();
+  if (!hasDB()) return { title: "Team Not Found" };
+  const db = getDB();
+  const con = await db
+    .prepare(`SELECT name, constructor_ref FROM constructors WHERE constructor_ref = ?`)
+    .bind(params.slug)
+    .first<{ name: string; constructor_ref: string }>();
 
   if (!con) return { title: "Team Not Found" };
 
@@ -58,13 +53,11 @@ export async function generateMetadata(
 // ─── Data fetcher ──────────────────────────────────────────────────────────
 
 async function getConstructor(slug: string) {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from("constructors")
-    .select("id, constructor_ref, name, color_hex")
-    .eq("constructor_ref", slug)
-    .single();
-  return data as { id: string; constructor_ref: string; name: string; color_hex: string | null } | null;
+  const db = getDB();
+  return db
+    .prepare(`SELECT id, constructor_ref, name, color_hex FROM constructors WHERE constructor_ref = ?`)
+    .bind(slug)
+    .first<{ id: string; constructor_ref: string; name: string; color_hex: string | null }>();
 }
 
 // ─── UI components ─────────────────────────────────────────────────────────
@@ -262,7 +255,7 @@ const RIVALRY_MAP: Record<string, string[]> = {
 // ─── Page ──────────────────────────────────────────────────────────────────
 
 export default async function TeamPage({ params }: { params: { slug: string } }) {
-  if (!hasPublicSupabaseConfig()) notFound();
+  if (!hasDB()) notFound();
 
   const con = await getConstructor(params.slug);
   if (!con) notFound();
@@ -273,17 +266,15 @@ export default async function TeamPage({ params }: { params: { slug: string } })
   const rivalRefs = RIVALRY_MAP[con.constructor_ref] ?? ["ferrari", "mercedes", "mclaren", "red_bull"].filter((r) => r !== con.constructor_ref);
   const rivalSlugs = rivalRefs.slice(0, 4).map((r) => buildTeamSlug(con.constructor_ref, r));
 
-  // Fetch rival names
-  const supabase = createServerClient();
-  const { data: rivals } = await supabase
-    .from("constructors")
-    .select("constructor_ref, name")
-    .in("constructor_ref", rivalRefs.slice(0, 4));
+  const db = getDB();
+  const rivalRefsPh = rivalRefs.slice(0, 4).map(() => "?").join(", ");
+  const { results: rivals } = await db
+    .prepare(`SELECT constructor_ref, name FROM constructors WHERE constructor_ref IN (${rivalRefsPh})`)
+    .bind(...rivalRefs.slice(0, 4))
+    .all<{ constructor_ref: string; name: string }>();
 
   const rivalMap = new Map<string, string>();
-  for (const r of (rivals ?? []) as { constructor_ref: string; name: string }[]) {
-    rivalMap.set(r.constructor_ref, r.name);
-  }
+  for (const r of rivals) rivalMap.set(r.constructor_ref, r.name);
 
   const era = stats.firstSeason && stats.lastSeason
     ? stats.firstSeason === stats.lastSeason

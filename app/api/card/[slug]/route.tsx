@@ -1,6 +1,6 @@
 import { ImageResponse } from "@vercel/og";
 import type { NextRequest } from "next/server";
-import { createServerClient } from "@/lib/supabase/client";
+import { getDB } from "@/lib/db/client";
 import {
   parseComparisonSlug,
   getTeamColor,
@@ -107,74 +107,26 @@ export async function GET(
   let colorB = "#3b82f6";
 
   try {
-    const supabase = createServerClient();
+    const db = getDB();
 
-    const [{ data: dA }, { data: dB }] = await Promise.all([
-      supabase
-        .from("drivers")
-        .select(
-          "id, driver_ref, first_name, last_name, nationality, headshot_url, dob"
-        )
-        .eq("driver_ref", parsed.driverARef)
-        .single(),
-      supabase
-        .from("drivers")
-        .select(
-          "id, driver_ref, first_name, last_name, nationality, headshot_url, dob"
-        )
-        .eq("driver_ref", parsed.driverBRef)
-        .single(),
+    const [dA, dB] = await Promise.all([
+      db.prepare(`SELECT id, driver_ref, first_name, last_name, nationality, headshot_url, dob FROM drivers WHERE driver_ref = ?`).bind(parsed.driverARef).first<Driver>(),
+      db.prepare(`SELECT id, driver_ref, first_name, last_name, nationality, headshot_url, dob FROM drivers WHERE driver_ref = ?`).bind(parsed.driverBRef).first<Driver>(),
     ]);
 
-    driverA = dA as Driver | null;
-    driverB = dB as Driver | null;
+    driverA = dA;
+    driverB = dB;
 
     if (driverA && driverB) {
-      const [{ data: comp }, { data: conA }, { data: conB }] =
-        await Promise.all([
-          supabase
-            .from("driver_comparisons")
-            .select("stats_json")
-            .is("season", null)
-            .or(
-              `and(driver_a_id.eq.${driverA.id},driver_b_id.eq.${driverB.id}),and(driver_a_id.eq.${driverB.id},driver_b_id.eq.${driverA.id})`
-            )
-            .single(),
-          supabase
-            .from("results")
-            .select("constructors(color_hex, constructor_ref)")
-            .eq("driver_id", driverA.id)
-            .eq("is_sprint", false)
-            .order("race_id", { ascending: false })
-            .limit(1)
-            .single(),
-          supabase
-            .from("results")
-            .select("constructors(color_hex, constructor_ref)")
-            .eq("driver_id", driverB.id)
-            .eq("is_sprint", false)
-            .order("race_id", { ascending: false })
-            .limit(1)
-            .single(),
-        ]);
+      const [comp, conA, conB] = await Promise.all([
+        db.prepare(`SELECT stats_json FROM driver_comparisons WHERE season IS NULL AND ((driver_a_id = ? AND driver_b_id = ?) OR (driver_a_id = ? AND driver_b_id = ?)) LIMIT 1`).bind(driverA.id, driverB.id, driverB.id, driverA.id).first<{ stats_json: string | null }>(),
+        db.prepare(`SELECT c.color_hex, c.constructor_ref FROM results r JOIN constructors c ON c.id = r.constructor_id WHERE r.driver_id = ? AND r.is_sprint = 0 ORDER BY r.race_id DESC LIMIT 1`).bind(driverA.id).first<{ color_hex: string | null; constructor_ref: string }>(),
+        db.prepare(`SELECT c.color_hex, c.constructor_ref FROM results r JOIN constructors c ON c.id = r.constructor_id WHERE r.driver_id = ? AND r.is_sprint = 0 ORDER BY r.race_id DESC LIMIT 1`).bind(driverB.id).first<{ color_hex: string | null; constructor_ref: string }>(),
+      ]);
 
-      if (comp) statsJson = comp.stats_json as ComparisonResult;
-
-      type ConRow = { color_hex: string | null; constructor_ref: string };
-      const cA = (
-        Array.isArray(conA?.constructors)
-          ? conA.constructors[0]
-          : conA?.constructors
-      ) as ConRow | null;
-      const cB = (
-        Array.isArray(conB?.constructors)
-          ? conB.constructors[0]
-          : conB?.constructors
-      ) as ConRow | null;
-      colorA =
-        cA?.color_hex ?? getTeamColor(cA?.constructor_ref ?? "") ?? "#e10600";
-      colorB =
-        cB?.color_hex ?? getTeamColor(cB?.constructor_ref ?? "") ?? "#3b82f6";
+      if (comp?.stats_json) try { statsJson = JSON.parse(comp.stats_json) as ComparisonResult; } catch { /* ignore */ }
+      colorA = conA?.color_hex ?? getTeamColor(conA?.constructor_ref ?? "") ?? "#e10600";
+      colorB = conB?.color_hex ?? getTeamColor(conB?.constructor_ref ?? "") ?? "#3b82f6";
     }
   } catch {
     // Fall through to generic card

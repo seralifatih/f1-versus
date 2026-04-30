@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
+import { getDB, hasDB } from "@/lib/db/client";
 import { getTeamColor, buildTeamSlug } from "@/lib/data/types";
 import { getOrComputeTeamComparison, buildTeamRadarMetrics } from "@/lib/comparison/team-compute";
 import type { TeamStats, TeamComparisonResult, TeamSeasonStats } from "@/lib/data/types";
@@ -39,46 +39,30 @@ const RIVALRY_PAIRS: [string, string][] = [
 // ─── Static params ─────────────────────────────────────────────────────────
 
 export async function generateStaticParams(): Promise<{ slug: string }[]> {
-  if (!hasPublicSupabaseConfig()) return [];
-  const supabase = createServerClient();
+  if (!hasDB()) return RIVALRY_PAIRS.map(([a, b]) => ({ slug: buildTeamSlug(a, b) }));
 
-  // Current teams (appeared in last 3 seasons)
+  const db = getDB();
   const currentYear = new Date().getFullYear();
-  const { data: recentRaces } = await supabase
-    .from("races")
-    .select("id")
-    .gte("season", currentYear - 2);
 
-  const recentRaceIds = (recentRaces ?? []).map((r: { id: string }) => r.id);
-
-  let currentRefs: string[] = [];
-  if (recentRaceIds.length > 0) {
-    const { data: currentResults } = await supabase
-      .from("results")
-      .select("constructor_id, constructors!inner(constructor_ref)")
-      .in("race_id", recentRaceIds)
-      .eq("is_sprint", false);
-
-    const refSet = new Set<string>();
-    for (const r of (currentResults ?? []) as unknown as { constructors: { constructor_ref: string } }[]) {
-      refSet.add(r.constructors.constructor_ref);
-    }
-    currentRefs = Array.from(refSet);
-  }
+  const { results: currentRefs } = await db
+    .prepare(
+      `SELECT DISTINCT c.constructor_ref
+       FROM results r
+       JOIN constructors c ON c.id = r.constructor_id
+       JOIN races rc ON rc.id = r.race_id
+       WHERE rc.season >= ? AND r.is_sprint = 0`
+    )
+    .bind(currentYear - 2)
+    .all<{ constructor_ref: string }>();
 
   const slugSet = new Set<string>();
-
-  // All current-team pairs
-  for (let i = 0; i < currentRefs.length; i++) {
-    for (let j = i + 1; j < currentRefs.length; j++) {
-      slugSet.add(buildTeamSlug(currentRefs[i], currentRefs[j]));
+  const refs = currentRefs.map((r) => r.constructor_ref);
+  for (let i = 0; i < refs.length; i++) {
+    for (let j = i + 1; j < refs.length; j++) {
+      slugSet.add(buildTeamSlug(refs[i], refs[j]));
     }
   }
-
-  // Top 20 historical rivalries
-  for (const [a, b] of RIVALRY_PAIRS) {
-    slugSet.add(buildTeamSlug(a, b));
-  }
+  for (const [a, b] of RIVALRY_PAIRS) slugSet.add(buildTeamSlug(a, b));
 
   return Array.from(slugSet).map((slug) => ({ slug }));
 }
@@ -91,16 +75,17 @@ export async function generateMetadata(
   const parsed = parseTeamSlug(params.slug);
   if (!parsed) return { title: "Team Comparison" };
 
-  const supabase = createServerClient();
-  const { data: cons } = await supabase
-    .from("constructors")
-    .select("constructor_ref, name")
-    .in("constructor_ref", [parsed.refA, parsed.refB]);
+  if (!hasDB()) return { title: "Team Comparison" };
+  const db = getDB();
+  const { results: cons } = await db
+    .prepare(`SELECT constructor_ref, name FROM constructors WHERE constructor_ref IN (?, ?)`)
+    .bind(parsed.refA, parsed.refB)
+    .all<{ constructor_ref: string; name: string }>();
 
-  if (!cons || cons.length < 2) return { title: "Team Comparison" };
+  if (cons.length < 2) return { title: "Team Comparison" };
 
-  const nameA = (cons as { constructor_ref: string; name: string }[]).find((c) => c.constructor_ref === parsed.refA)?.name ?? parsed.refA;
-  const nameB = (cons as { constructor_ref: string; name: string }[]).find((c) => c.constructor_ref === parsed.refB)?.name ?? parsed.refB;
+  const nameA = cons.find((c) => c.constructor_ref === parsed.refA)?.name ?? parsed.refA;
+  const nameB = cons.find((c) => c.constructor_ref === parsed.refB)?.name ?? parsed.refB;
 
   const BASE = getSiteUrl();
   const canonicalSlug = buildTeamSlug(parsed.refA, parsed.refB);
@@ -431,7 +416,7 @@ function ComparisonJsonLd({
 // ─── Page ──────────────────────────────────────────────────────────────────
 
 export default async function TeamComparePage({ params }: { params: { slug: string } }) {
-  if (!hasPublicSupabaseConfig()) notFound();
+  if (!hasDB()) notFound();
 
   const parsed = parseTeamSlug(params.slug);
   if (!parsed) notFound();
@@ -456,14 +441,15 @@ export default async function TeamComparePage({ params }: { params: { slug: stri
     .map(([a, b]) => ({ slug: buildTeamSlug(a, b), refA: a, refB: b }));
 
   const relatedRefs = Array.from(new Set(relatedPairs.flatMap((p) => [p.refA, p.refB])));
-  const supabase = createServerClient();
-  const { data: relatedCons } = await supabase
-    .from("constructors")
-    .select("constructor_ref, name, color_hex")
-    .in("constructor_ref", relatedRefs);
+  const db = getDB();
+  const relatedRefsPh = relatedRefs.map(() => "?").join(", ");
+  const { results: relatedCons } = await db
+    .prepare(`SELECT constructor_ref, name, color_hex FROM constructors WHERE constructor_ref IN (${relatedRefsPh})`)
+    .bind(...relatedRefs)
+    .all<{ constructor_ref: string; name: string; color_hex: string | null }>();
 
   const conMap = new Map<string, { name: string; color: string }>();
-  for (const c of (relatedCons ?? []) as { constructor_ref: string; name: string; color_hex: string | null }[]) {
+  for (const c of relatedCons) {
     conMap.set(c.constructor_ref, { name: c.name, color: c.color_hex ?? getTeamColor(c.constructor_ref) });
   }
 

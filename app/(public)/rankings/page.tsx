@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
+import { getDB, hasDB } from "@/lib/db/client";
 
 export const metadata: Metadata = {
   title: "F1 Driver Rankings — All-Time Stats",
@@ -29,76 +29,29 @@ interface RankedDriver {
 }
 
 async function getDriverRankings(): Promise<RankedDriver[]> {
-  if (!hasPublicSupabaseConfig()) {
-    return [];
-  }
+  if (!hasDB()) return [];
 
-  const supabase = createServerClient();
+  const db = getDB();
 
-  // Aggregate stats from results and qualifying
-  const { data: drivers, error: driversError } = await supabase
-    .from("drivers")
-    .select("id, driver_ref, first_name, last_name, nationality, headshot_url");
+  const { results } = await db
+    .prepare(
+      `SELECT d.id, d.driver_ref, d.first_name, d.last_name, d.nationality, d.headshot_url,
+              COUNT(r.id) AS races,
+              SUM(CASE WHEN r.position = 1 THEN 1 ELSE 0 END) AS wins,
+              SUM(CASE WHEN r.position <= 3 THEN 1 ELSE 0 END) AS podiums,
+              SUM(r.points) AS points,
+              SUM(CASE WHEN r.position IS NULL THEN 1 ELSE 0 END) AS dnfs,
+              (SELECT COUNT(*) FROM qualifying q WHERE q.driver_id = d.id AND q.position = 1) AS poles
+       FROM drivers d
+       JOIN results r ON r.driver_id = d.id
+       WHERE r.is_sprint = 0
+       GROUP BY d.id
+       HAVING races > 0
+       ORDER BY wins DESC, podiums DESC, races DESC`
+    )
+    .all<RankedDriver>();
 
-  if (driversError || !drivers) return [];
-
-  // Get all results in a single query for efficiency
-  const { data: results, error: resultsError } = await supabase
-    .from("results")
-    .select("driver_id, position, points, status")
-    .eq("is_sprint", false);
-
-  if (resultsError || !results) return [];
-
-  // Get qualifying for poles
-  const { data: qualifying, error: qualifyingError } = await supabase
-    .from("qualifying")
-    .select("driver_id, position");
-
-  if (qualifyingError || !qualifying) return [];
-
-  // Aggregate per driver
-  const statsMap = new Map<
-    string,
-    { wins: number; podiums: number; races: number; points: number; dnfs: number }
-  >();
-
-  for (const r of results) {
-    if (!statsMap.has(r.driver_id)) {
-      statsMap.set(r.driver_id, { wins: 0, podiums: 0, races: 0, points: 0, dnfs: 0 });
-    }
-    const s = statsMap.get(r.driver_id)!;
-    s.races++;
-    s.points += r.points ?? 0;
-    if (r.position === 1) s.wins++;
-    if (r.position !== null && r.position <= 3) s.podiums++;
-    if (r.position === null || isDNF(r.status)) s.dnfs++;
-  }
-
-  const polesMap = new Map<string, number>();
-  for (const q of qualifying) {
-    if (q.position === 1) {
-      polesMap.set(q.driver_id, (polesMap.get(q.driver_id) ?? 0) + 1);
-    }
-  }
-
-  return drivers
-    .map((d) => {
-      const stats = statsMap.get(d.id) ?? {
-        wins: 0,
-        podiums: 0,
-        races: 0,
-        points: 0,
-        dnfs: 0,
-      };
-      return {
-        ...d,
-        ...stats,
-        poles: polesMap.get(d.id) ?? 0,
-      };
-    })
-    .filter((d) => d.races > 0)
-    .sort((a, b) => b.wins - a.wins || b.podiums - a.podiums || b.races - a.races);
+  return results;
 }
 
 function isDNF(status: string | null): boolean {

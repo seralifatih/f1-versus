@@ -4,7 +4,7 @@
  * Includes backlink to full comparison page.
  */
 
-import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
+import { getDB, hasDB } from "@/lib/db/client";
 import { computeComparison } from "@/lib/comparison/compute";
 import {
   parseComparisonSlug,
@@ -48,81 +48,46 @@ async function getEmbedData(slug: string): Promise<{
   colorA: string;
   colorB: string;
 } | null> {
-  if (!hasPublicSupabaseConfig()) return null;
+  if (!hasDB()) return null;
 
   const parsed = parseComparisonSlug(slug);
   if (!parsed) return null;
 
   try {
-  const supabase = createServerClient();
+    const db = getDB();
 
-  const [{ data: dA }, { data: dB }] = await Promise.all([
-    supabase
-      .from("drivers")
-      .select("id, driver_ref, first_name, last_name, nationality, headshot_url, dob")
-      .eq("driver_ref", parsed.driverARef)
-      .single(),
-    supabase
-      .from("drivers")
-      .select("id, driver_ref, first_name, last_name, nationality, headshot_url, dob")
-      .eq("driver_ref", parsed.driverBRef)
-      .single(),
-  ]);
+    const [dA, dB] = await Promise.all([
+      db.prepare(`SELECT id, driver_ref, first_name, last_name, nationality, headshot_url, dob FROM drivers WHERE driver_ref = ?`).bind(parsed.driverARef).first<Driver>(),
+      db.prepare(`SELECT id, driver_ref, first_name, last_name, nationality, headshot_url, dob FROM drivers WHERE driver_ref = ?`).bind(parsed.driverBRef).first<Driver>(),
+    ]);
 
-  if (!dA || !dB) return null;
+    if (!dA || !dB) return null;
 
-  const canonicalSlug = buildComparisonSlug(parsed.driverARef, parsed.driverBRef);
+    const canonicalSlug = buildComparisonSlug(parsed.driverARef, parsed.driverBRef);
+    const cached = await db
+      .prepare(`SELECT stats_json FROM driver_comparisons WHERE slug = ? AND season IS NULL`)
+      .bind(canonicalSlug)
+      .first<{ stats_json: string | null }>();
 
-  // Try cached first, fall back to compute
-  const { data: cached } = await supabase
-    .from("driver_comparisons")
-    .select("stats_json")
-    .eq("slug", canonicalSlug)
-    .is("season", null)
-    .single();
+    let comparison: ComparisonResult | null = null;
+    if (cached?.stats_json) {
+      try { comparison = JSON.parse(cached.stats_json) as ComparisonResult; } catch { /* fall through */ }
+    }
+    if (!comparison) comparison = await computeComparison(dA.id, dB.id);
+    if (!comparison) return null;
 
-  let comparison: ComparisonResult | null = null;
-  if (cached?.stats_json) {
-    comparison = cached.stats_json as ComparisonResult;
-  } else {
-    comparison = await computeComparison(dA.id, dB.id);
-  }
+    const [rowA, rowB] = await Promise.all([
+      db.prepare(`SELECT c.color_hex, c.constructor_ref FROM results r JOIN constructors c ON c.id = r.constructor_id WHERE r.driver_id = ? AND r.is_sprint = 0 ORDER BY r.race_id DESC LIMIT 1`).bind(dA.id).first<{ color_hex: string | null; constructor_ref: string }>(),
+      db.prepare(`SELECT c.color_hex, c.constructor_ref FROM results r JOIN constructors c ON c.id = r.constructor_id WHERE r.driver_id = ? AND r.is_sprint = 0 ORDER BY r.race_id DESC LIMIT 1`).bind(dB.id).first<{ color_hex: string | null; constructor_ref: string }>(),
+    ]);
 
-  if (!comparison) return null;
-
-  // Resolve team colors
-  const [{ data: conA }, { data: conB }] = await Promise.all([
-    supabase
-      .from("results")
-      .select("constructors(color_hex, constructor_ref)")
-      .eq("driver_id", dA.id)
-      .eq("is_sprint", false)
-      .order("race_id", { ascending: false })
-      .limit(1)
-      .single(),
-    supabase
-      .from("results")
-      .select("constructors(color_hex, constructor_ref)")
-      .eq("driver_id", dB.id)
-      .eq("is_sprint", false)
-      .order("race_id", { ascending: false })
-      .limit(1)
-      .single(),
-  ]);
-
-  type ConRow = { color_hex: string | null; constructor_ref: string };
-  const cA = (Array.isArray(conA?.constructors) ? conA.constructors[0] : conA?.constructors) as ConRow | null;
-  const cB = (Array.isArray(conB?.constructors) ? conB.constructors[0] : conB?.constructors) as ConRow | null;
-  const colorA = cA?.color_hex ?? getTeamColor(cA?.constructor_ref ?? "") ?? "#e10600";
-  const colorB = cB?.color_hex ?? getTeamColor(cB?.constructor_ref ?? "") ?? "#3b82f6";
-
-  return {
-    driverA: dA as Driver,
-    driverB: dB as Driver,
-    comparison,
-    colorA,
-    colorB,
-  };
+    return {
+      driverA: dA,
+      driverB: dB,
+      comparison,
+      colorA: rowA?.color_hex ?? getTeamColor(rowA?.constructor_ref ?? "") ?? "#e10600",
+      colorB: rowB?.color_hex ?? getTeamColor(rowB?.constructor_ref ?? "") ?? "#3b82f6",
+    };
   } catch {
     return null;
   }

@@ -22,7 +22,7 @@
  */
 
 import type { MetricDistribution } from "../data/types";
-import { createServiceRoleClient } from "../supabase/client";
+import { getDB } from "../db/client";
 
 // ─── Piecewise interpolation ───────────────────────────────────────────────
 
@@ -102,20 +102,19 @@ export function percentileLabel(raw: number, dist: MetricDistribution): string {
  */
 export async function fetchMetricDistributions(): Promise<Map<string, MetricDistribution>> {
   try {
-    const supabase = createServiceRoleClient();
-    const { data, error } = await supabase
-      .from("metric_distributions")
-      .select("metric_name, p10, p50, p90, max");
+    const db = getDB();
+    const { results } = await db
+      .prepare(`SELECT metric_name, p10, p50, p90, max FROM metric_distributions`)
+      .all<MetricDistribution>();
 
-    if (error || !data || data.length === 0) return new Map();
+    if (!results || results.length === 0) return new Map();
 
     const map = new Map<string, MetricDistribution>();
-    for (const row of data as MetricDistribution[]) {
+    for (const row of results) {
       map.set(row.metric_name, row);
     }
     return map;
   } catch {
-    // Table may not exist yet on first run; fall back gracefully
     return new Map();
   }
 }

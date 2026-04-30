@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/lib/supabase/client";
+import { getDB } from "@/lib/db/client";
 import { computeComparison } from "@/lib/comparison/compute";
 import type { ComparisonFilters } from "@/lib/data/types";
 
@@ -35,11 +35,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid circuit type" }, { status: 400 });
   }
 
-  const supabase = createServiceRoleClient();
+  const db = getDB();
 
-  const [{ data: dA }, { data: dB }] = await Promise.all([
-    supabase.from("drivers").select("id").eq("driver_ref", driverARef).single(),
-    supabase.from("drivers").select("id").eq("driver_ref", driverBRef).single(),
+  const [dA, dB] = await Promise.all([
+    db.prepare(`SELECT id FROM drivers WHERE driver_ref = ?`).bind(driverARef).first<{ id: string }>(),
+    db.prepare(`SELECT id FROM drivers WHERE driver_ref = ?`).bind(driverBRef).first<{ id: string }>(),
   ]);
 
   if (!dA || !dB) {

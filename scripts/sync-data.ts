@@ -1,7 +1,7 @@
 /**
  * scripts/sync-data.ts
  *
- * CLI entrypoint for syncing F1 data from Jolpica API into Supabase.
+ * CLI entrypoint for syncing F1 data from Jolpica API into D1.
  *
  * Usage:
  *   npx tsx scripts/sync-data.ts              — full sync (all seasons)
@@ -10,7 +10,7 @@
  */
 
 import "dotenv/config";
-import { createClient } from "@supabase/supabase-js";
+import { createScriptDB } from "../lib/db/client";
 import {
   fetchSeasons,
   fetchRacesByYear,
@@ -34,11 +34,7 @@ import {
 
 // ─── Setup ─────────────────────────────────────────────────────────────────
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const db = createScriptDB();
 
 // Parse CLI args
 const args = process.argv.slice(2);
@@ -61,101 +57,159 @@ function error(message: string, err?: unknown): void {
   console.error(`[${new Date().toISOString()}] ✖ ${message}`, err ?? "");
 }
 
+function now(): string {
+  return new Date().toISOString();
+}
+
+function newId(): string {
+  return crypto.randomUUID();
+}
+
 // ─── Upsert helpers ────────────────────────────────────────────────────────
 
 async function upsertDriver(driver: JolpicaDriver): Promise<void> {
-  const { error: err } = await supabase.from("drivers").upsert(
-    {
-      driver_ref: driver.driverId,
-      first_name: driver.givenName,
-      last_name: driver.familyName,
-      dob: driver.dateOfBirth ?? null,
-      nationality: driver.nationality ?? null,
-      headshot_url: null, // Populated separately from official F1 sources
-    },
-    { onConflict: "driver_ref", ignoreDuplicates: false }
-  );
-  if (err) warn(`Failed to upsert driver ${driver.driverId}: ${err.message}`);
+  try {
+    await db
+      .prepare(
+        `INSERT INTO drivers (id, driver_ref, first_name, last_name, dob, nationality, headshot_url, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (driver_ref) DO UPDATE SET
+           first_name   = excluded.first_name,
+           last_name    = excluded.last_name,
+           dob          = excluded.dob,
+           nationality  = excluded.nationality,
+           updated_at   = excluded.updated_at`
+      )
+      .bind(
+        newId(),
+        driver.driverId,
+        driver.givenName,
+        driver.familyName,
+        driver.dateOfBirth ?? null,
+        driver.nationality ?? null,
+        null,
+        now(),
+        now()
+      )
+      .run();
+  } catch (err) {
+    warn(`Failed to upsert driver ${driver.driverId}: ${String(err)}`);
+  }
 }
 
 async function upsertConstructor(constructor: JolpicaConstructor): Promise<void> {
   const colorHex = CONSTRUCTOR_COLORS[constructor.constructorId] ?? null;
-  const payload = {
-    constructor_ref: constructor.constructorId,
-    name: constructor.name,
-    ...(colorHex ? { color_hex: colorHex } : {}),
-  };
-  const { error: err } = await supabase.from("constructors").upsert(
-    payload,
-    { onConflict: "constructor_ref", ignoreDuplicates: false }
-  );
-  if (err) warn(`Failed to upsert constructor ${constructor.constructorId}: ${err.message}`);
+  try {
+    if (colorHex) {
+      await db
+        .prepare(
+          `INSERT INTO constructors (id, constructor_ref, name, color_hex, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (constructor_ref) DO UPDATE SET
+             name       = excluded.name,
+             color_hex  = excluded.color_hex,
+             updated_at = excluded.updated_at`
+        )
+        .bind(newId(), constructor.constructorId, constructor.name, colorHex, now(), now())
+        .run();
+    } else {
+      await db
+        .prepare(
+          `INSERT INTO constructors (id, constructor_ref, name, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT (constructor_ref) DO UPDATE SET
+             name       = excluded.name,
+             updated_at = excluded.updated_at`
+        )
+        .bind(newId(), constructor.constructorId, constructor.name, now(), now())
+        .run();
+    }
+  } catch (err) {
+    warn(`Failed to upsert constructor ${constructor.constructorId}: ${String(err)}`);
+  }
 }
 
 async function upsertCircuit(race: JolpicaRace): Promise<void> {
   const c = race.Circuit;
-  const payload = {
-    circuit_ref: c.circuitId,
-    name: c.circuitName,
-    country: c.Location.country,
-    lat: parseFloat(c.Location.lat),
-    lng: parseFloat(c.Location.long),
-  };
-  const { error: err } = await supabase.from("circuits").upsert(
-    payload,
-    { onConflict: "circuit_ref", ignoreDuplicates: false }
-  );
-  if (err) warn(`Failed to upsert circuit ${c.circuitId}: ${err.message}`);
+  try {
+    await db
+      .prepare(
+        `INSERT INTO circuits (id, circuit_ref, name, country, lat, lng, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (circuit_ref) DO UPDATE SET
+           name       = excluded.name,
+           country    = excluded.country,
+           lat        = excluded.lat,
+           lng        = excluded.lng,
+           updated_at = excluded.updated_at`
+      )
+      .bind(
+        newId(),
+        c.circuitId,
+        c.circuitName,
+        c.Location.country,
+        parseFloat(c.Location.lat),
+        parseFloat(c.Location.long),
+        now(),
+        now()
+      )
+      .run();
+  } catch (err) {
+    warn(`Failed to upsert circuit ${c.circuitId}: ${String(err)}`);
+  }
 }
 
-async function getOrCreateCircuitId(circuitRef: string): Promise<string | null> {
-  const { data } = await supabase
-    .from("circuits")
-    .select("id")
-    .eq("circuit_ref", circuitRef)
-    .single();
-  return data?.id ?? null;
+async function getCircuitId(circuitRef: string): Promise<string | null> {
+  const row = await db
+    .prepare(`SELECT id FROM circuits WHERE circuit_ref = ?`)
+    .bind(circuitRef)
+    .first<{ id: string }>();
+  return row?.id ?? null;
 }
 
-async function getOrCreateDriverId(driverRef: string): Promise<string | null> {
-  const { data } = await supabase
-    .from("drivers")
-    .select("id")
-    .eq("driver_ref", driverRef)
-    .single();
-  return data?.id ?? null;
+async function getDriverId(driverRef: string): Promise<string | null> {
+  const row = await db
+    .prepare(`SELECT id FROM drivers WHERE driver_ref = ?`)
+    .bind(driverRef)
+    .first<{ id: string }>();
+  return row?.id ?? null;
 }
 
-async function getOrCreateConstructorId(constructorRef: string): Promise<string | null> {
-  const { data } = await supabase
-    .from("constructors")
-    .select("id")
-    .eq("constructor_ref", constructorRef)
-    .single();
-  return data?.id ?? null;
+async function getConstructorId(constructorRef: string): Promise<string | null> {
+  const row = await db
+    .prepare(`SELECT id FROM constructors WHERE constructor_ref = ?`)
+    .bind(constructorRef)
+    .first<{ id: string }>();
+  return row?.id ?? null;
 }
 
 async function upsertRace(race: JolpicaRace, circuitId: string): Promise<string | null> {
-  const { data, error: err } = await supabase
-    .from("races")
-    .upsert(
-      {
-        season: parseInt(race.season, 10),
-        round: parseInt(race.round, 10),
-        circuit_id: circuitId,
-        date: race.date,
-        name: race.raceName,
-      },
-      { onConflict: "season,round" }
-    )
-    .select("id")
-    .single();
+  const season = parseInt(race.season, 10);
+  const round = parseInt(race.round, 10);
+  const id = newId();
+  try {
+    await db
+      .prepare(
+        `INSERT INTO races (id, season, round, circuit_id, date, name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (season, round) DO UPDATE SET
+           circuit_id = excluded.circuit_id,
+           date       = excluded.date,
+           name       = excluded.name,
+           updated_at = excluded.updated_at`
+      )
+      .bind(id, season, round, circuitId, race.date, race.raceName, now(), now())
+      .run();
 
-  if (err) {
-    warn(`Failed to upsert race ${race.season}/${race.round}: ${err.message}`);
+    const row = await db
+      .prepare(`SELECT id FROM races WHERE season = ? AND round = ?`)
+      .bind(season, round)
+      .first<{ id: string }>();
+    return row?.id ?? null;
+  } catch (err) {
+    warn(`Failed to upsert race ${race.season}/${race.round}: ${String(err)}`);
     return null;
   }
-  return data?.id ?? null;
 }
 
 async function upsertResult(
@@ -163,39 +217,51 @@ async function upsertResult(
   result: JolpicaResult,
   isSprint = false
 ): Promise<void> {
-  const driverId = await getOrCreateDriverId(result.Driver.driverId);
-  const constructorId = await getOrCreateConstructorId(result.Constructor.constructorId);
+  const driverId = await getDriverId(result.Driver.driverId);
+  const constructorId = await getConstructorId(result.Constructor.constructorId);
 
   if (!driverId || !constructorId) {
-    warn(
-      `Skipping result for ${result.Driver.driverId} — missing driver or constructor ID`
-    );
+    warn(`Skipping result for ${result.Driver.driverId} — missing driver or constructor ID`);
     return;
   }
 
   const position = parsePosition(result.positionText);
   const grid = parseInt(result.grid, 10);
 
-  const { error: err } = await supabase.from("results").upsert(
-    {
-      race_id: raceId,
-      driver_id: driverId,
-      constructor_id: constructorId,
-      grid: isNaN(grid) ? null : grid,
-      position,
-      points: parseFloat(result.points) || 0,
-      status: result.status ?? null,
-      fastest_lap_time: result.FastestLap?.Time?.time ?? null,
-      fastest_lap_rank: result.FastestLap?.rank ? parseInt(result.FastestLap.rank, 10) : null,
-      is_sprint: isSprint,
-    },
-    { onConflict: "race_id,driver_id,is_sprint" }
-  );
-
-  if (err) {
-    warn(
-      `Failed to upsert result for ${result.Driver.driverId} in race ${raceId}: ${err.message}`
-    );
+  try {
+    await db
+      .prepare(
+        `INSERT INTO results (id, race_id, driver_id, constructor_id, grid, position, points, status,
+           fastest_lap_time, fastest_lap_rank, is_sprint, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (race_id, driver_id, is_sprint) DO UPDATE SET
+           constructor_id   = excluded.constructor_id,
+           grid             = excluded.grid,
+           position         = excluded.position,
+           points           = excluded.points,
+           status           = excluded.status,
+           fastest_lap_time = excluded.fastest_lap_time,
+           fastest_lap_rank = excluded.fastest_lap_rank,
+           updated_at       = excluded.updated_at`
+      )
+      .bind(
+        newId(),
+        raceId,
+        driverId,
+        constructorId,
+        isNaN(grid) ? null : grid,
+        position,
+        parseFloat(result.points) || 0,
+        result.status ?? null,
+        result.FastestLap?.Time?.time ?? null,
+        result.FastestLap?.rank ? parseInt(result.FastestLap.rank, 10) : null,
+        isSprint ? 1 : 0,
+        now(),
+        now()
+      )
+      .run();
+  } catch (err) {
+    warn(`Failed to upsert result for ${result.Driver.driverId} in race ${raceId}: ${String(err)}`);
   }
 }
 
@@ -203,35 +269,44 @@ async function upsertQualifying(
   raceId: string,
   result: JolpicaQualifyingResult
 ): Promise<void> {
-  const driverId = await getOrCreateDriverId(result.Driver.driverId);
-  const constructorId = await getOrCreateConstructorId(result.Constructor.constructorId);
+  const driverId = await getDriverId(result.Driver.driverId);
+  const constructorId = await getConstructorId(result.Constructor.constructorId);
 
   if (!driverId || !constructorId) {
-    warn(
-      `Skipping qualifying for ${result.Driver.driverId} — missing driver or constructor ID`
-    );
+    warn(`Skipping qualifying for ${result.Driver.driverId} — missing driver or constructor ID`);
     return;
   }
 
   const position = parsePosition(result.position);
 
-  const { error: err } = await supabase.from("qualifying").upsert(
-    {
-      race_id: raceId,
-      driver_id: driverId,
-      constructor_id: constructorId,
-      q1_time: result.Q1 ?? null,
-      q2_time: result.Q2 ?? null,
-      q3_time: result.Q3 ?? null,
-      position,
-    },
-    { onConflict: "race_id,driver_id" }
-  );
-
-  if (err) {
-    warn(
-      `Failed to upsert qualifying for ${result.Driver.driverId} in race ${raceId}: ${err.message}`
-    );
+  try {
+    await db
+      .prepare(
+        `INSERT INTO qualifying (id, race_id, driver_id, constructor_id, q1_time, q2_time, q3_time, position, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (race_id, driver_id) DO UPDATE SET
+           constructor_id = excluded.constructor_id,
+           q1_time        = excluded.q1_time,
+           q2_time        = excluded.q2_time,
+           q3_time        = excluded.q3_time,
+           position       = excluded.position,
+           updated_at     = excluded.updated_at`
+      )
+      .bind(
+        newId(),
+        raceId,
+        driverId,
+        constructorId,
+        result.Q1 ?? null,
+        result.Q2 ?? null,
+        result.Q3 ?? null,
+        position,
+        now(),
+        now()
+      )
+      .run();
+  } catch (err) {
+    warn(`Failed to upsert qualifying for ${result.Driver.driverId} in race ${raceId}: ${String(err)}`);
   }
 }
 
@@ -266,15 +341,13 @@ async function syncSeason(year: number): Promise<void> {
     const round = parseInt(race.round, 10);
     log(`  Round ${round}: ${race.raceName}`);
 
-    // Upsert circuit
     await upsertCircuit(race);
-    const circuitId = await getOrCreateCircuitId(race.Circuit.circuitId);
+    const circuitId = await getCircuitId(race.Circuit.circuitId);
     if (!circuitId) {
       warn(`  Could not get circuit ID for ${race.Circuit.circuitId}, skipping round`);
       continue;
     }
 
-    // Upsert race
     const raceId = await upsertRace(race, circuitId);
     if (!raceId) {
       warn(`  Could not get race ID for ${year}/${round}, skipping`);
@@ -286,7 +359,6 @@ async function syncSeason(year: number): Promise<void> {
       continue;
     }
 
-    // Fetch and upsert race results
     try {
       const results = await fetchResultsByRace(year, round);
       log(`    ${results.length} results`);
@@ -298,7 +370,6 @@ async function syncSeason(year: number): Promise<void> {
       warn(`    Failed to fetch results for ${year}/${round}: ${String(err)}`);
     }
 
-    // Fetch and upsert qualifying
     try {
       const qualifyingResults = await fetchQualifyingByRace(year, round);
       log(`    ${qualifyingResults.length} qualifying results`);
@@ -310,7 +381,6 @@ async function syncSeason(year: number): Promise<void> {
       warn(`    Failed to fetch qualifying for ${year}/${round}: ${String(err)}`);
     }
 
-    // Fetch sprint results (won't throw — returns empty array for non-sprint rounds)
     const sprintResults = await fetchSprintByRace(year, round);
     if (sprintResults.length > 0) {
       log(`    ${sprintResults.length} sprint results`);
@@ -327,12 +397,6 @@ async function main(): Promise<void> {
   log("F1-Versus data sync starting...");
   log(`Mode: ${forceSeason ? `season ${forceSeason}` : isIncremental ? "incremental (current season)" : "full sync"}`);
 
-  // Validate environment
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
-    process.exit(1);
-  }
-
   const startTime = Date.now();
 
   try {
@@ -346,14 +410,11 @@ async function main(): Promise<void> {
       seasonsToSync = [latestSeason];
       log(`Latest available Jolpica season: ${latestSeason}`);
     } else {
-      // Full sync: all seasons from 1950 to current
       log("\nFetching all seasons from Jolpica...");
       seasonsToSync = await fetchSeasons();
       log(`Found ${seasonsToSync.length} seasons to sync`);
     }
 
-    // For incremental/single-season runs, only seed the current season's roster first.
-    // For full sync, seed the full historical driver/constructor list once.
     await syncDriversAndConstructors(
       forceSeason || isIncremental ? seasonsToSync[0] : undefined
     );
@@ -367,7 +428,6 @@ async function main(): Promise<void> {
       for (const endpoint of failedEndpoints) {
         warn(`  ${endpoint}`);
       }
-      log("Rerun the affected seasons sequentially after the other sync processes have stopped.");
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);

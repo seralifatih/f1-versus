@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
+import { getDB, hasDB } from "@/lib/db/client";
 import { DriverGrid } from "@/components/drivers/DriverGrid";
 
 export const metadata: Metadata = {
@@ -31,99 +31,67 @@ export interface DriverWithStats {
 // ─── Data fetching ─────────────────────────────────────────────────────────
 
 async function getDriversWithStats(): Promise<DriverWithStats[]> {
-  if (!hasPublicSupabaseConfig()) {
-    return [];
-  }
+  if (!hasDB()) return [];
 
-  const supabase = createServerClient();
-
-  // Get current season year
+  const db = getDB();
   const currentYear = new Date().getFullYear();
 
-  // Fetch all drivers
-  const { data: drivers, error: driversError } = await supabase
-    .from("drivers")
-    .select("id, driver_ref, first_name, last_name, dob, nationality, headshot_url")
-    .order("last_name");
+  const { results: drivers } = await db
+    .prepare(`SELECT id, driver_ref, first_name, last_name, dob, nationality, headshot_url FROM drivers ORDER BY last_name`)
+    .all<{ id: string; driver_ref: string; first_name: string; last_name: string; dob: string | null; nationality: string | null; headshot_url: string | null }>();
 
-  if (driversError || !drivers) return [];
+  if (drivers.length === 0) return [];
 
-  // Get current season driver IDs (races in currentYear)
-  const { data: currentSeasonResults } = await supabase
-    .from("results")
-    .select("driver_id, races!inner(season)")
-    .eq("races.season", currentYear)
-    .eq("is_sprint", false);
+  const [
+    { results: currentSeasonResults },
+    { results: wins },
+    { results: races },
+    { results: podiums },
+    { results: latestResults },
+  ] = await Promise.all([
+    db.prepare(
+      `SELECT DISTINCT r.driver_id FROM results r
+       JOIN races rc ON rc.id = r.race_id
+       WHERE rc.season = ? AND r.is_sprint = 0`
+    ).bind(currentYear).all<{ driver_id: string }>(),
 
-  const currentDriverIds = new Set(
-    (currentSeasonResults ?? []).map((r: { driver_id: number }) => r.driver_id)
-  );
+    db.prepare(`SELECT driver_id FROM results WHERE position = 1 AND is_sprint = 0`)
+      .all<{ driver_id: string }>(),
 
-  // Get career win counts (position = 1)
-  const { data: wins } = await supabase
-    .from("results")
-    .select("driver_id")
-    .eq("position", 1)
-    .eq("is_sprint", false);
+    db.prepare(`SELECT driver_id FROM results WHERE is_sprint = 0 AND position IS NOT NULL`)
+      .all<{ driver_id: string }>(),
 
-  const winMap = new Map<number, number>();
-  for (const w of wins ?? []) {
-    winMap.set(w.driver_id, (winMap.get(w.driver_id) ?? 0) + 1);
+    db.prepare(`SELECT driver_id FROM results WHERE position IN (1,2,3) AND is_sprint = 0`)
+      .all<{ driver_id: string }>(),
+
+    db.prepare(
+      `SELECT r.driver_id, c.name AS team_name, c.color_hex AS team_color
+       FROM results r
+       JOIN constructors c ON c.id = r.constructor_id
+       JOIN races rc ON rc.id = r.race_id
+       WHERE r.is_sprint = 0
+       ORDER BY rc.season DESC, rc.round DESC`
+    ).all<{ driver_id: string; team_name: string | null; team_color: string | null }>(),
+  ]);
+
+  const currentDriverIds = new Set(currentSeasonResults.map((r) => r.driver_id));
+
+  const winMap = new Map<string, number>();
+  for (const w of wins) winMap.set(w.driver_id, (winMap.get(w.driver_id) ?? 0) + 1);
+
+  const raceMap = new Map<string, number>();
+  for (const r of races) raceMap.set(r.driver_id, (raceMap.get(r.driver_id) ?? 0) + 1);
+
+  const podiumMap = new Map<string, number>();
+  for (const p of podiums) podiumMap.set(p.driver_id, (podiumMap.get(p.driver_id) ?? 0) + 1);
+
+  const teamMap = new Map<string, { teamName: string | null; teamColor: string | null }>();
+  for (const r of latestResults) {
+    if (!teamMap.has(r.driver_id)) teamMap.set(r.driver_id, { teamName: r.team_name, teamColor: r.team_color });
   }
 
-  // Get career race counts
-  const { data: races } = await supabase
-    .from("results")
-    .select("driver_id")
-    .eq("is_sprint", false)
-    .not("position", "is", null);
-
-  const raceMap = new Map<number, number>();
-  for (const r of races ?? []) {
-    raceMap.set(r.driver_id, (raceMap.get(r.driver_id) ?? 0) + 1);
-  }
-
-  // Get podium counts (position in 1,2,3)
-  const { data: podiums } = await supabase
-    .from("results")
-    .select("driver_id")
-    .in("position", [1, 2, 3])
-    .eq("is_sprint", false);
-
-  const podiumMap = new Map<number, number>();
-  for (const p of podiums ?? []) {
-    podiumMap.set(p.driver_id, (podiumMap.get(p.driver_id) ?? 0) + 1);
-  }
-
-  // Get most recent constructor per driver (latest race)
-  const { data: latestResults } = await supabase
-    .from("results")
-    .select(
-      `
-      driver_id,
-      constructor_id,
-      races!inner(season),
-      constructors(name, color_hex)
-    `
-    )
-    .eq("is_sprint", false)
-    .order("races.season", { ascending: false });
-
-  // Build map: driver_id → { teamName, teamColor }
-  const teamMap = new Map<number, { teamName: string | null; teamColor: string | null }>();
-  for (const r of latestResults ?? []) {
-    if (!teamMap.has(r.driver_id)) {
-      const constructor = Array.isArray(r.constructors) ? r.constructors[0] : r.constructors;
-      teamMap.set(r.driver_id, {
-        teamName: constructor?.name ?? null,
-        teamColor: constructor?.color_hex ?? null,
-      });
-    }
-  }
-
-  // Compose result
   const result: DriverWithStats[] = drivers.map((d) => ({
-    id: d.id,
+    id: d.id as unknown as number,
     driver_ref: d.driver_ref,
     first_name: d.first_name,
     last_name: d.last_name,
@@ -138,7 +106,6 @@ async function getDriversWithStats(): Promise<DriverWithStats[]> {
     is_current: currentDriverIds.has(d.id),
   }));
 
-  // Sort: current drivers first, then by last name
   result.sort((a, b) => {
     if (a.is_current && !b.is_current) return -1;
     if (!a.is_current && b.is_current) return 1;

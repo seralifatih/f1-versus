@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
+import { getDB, hasDB } from "@/lib/db/client";
 import { getTeamColor, buildTeamSlug } from "@/lib/data/types";
 import { getSiteUrl } from "@/lib/site-url";
 
@@ -27,35 +27,26 @@ const FEATURED_RIVALRIES: [string, string][] = [
 // ─── Data fetcher ──────────────────────────────────────────────────────────
 
 async function getTeams() {
-  if (!hasPublicSupabaseConfig()) return [];
-  const supabase = createServerClient();
-
-  const { data } = await supabase
-    .from("constructors")
-    .select("id, constructor_ref, name, color_hex")
-    .order("name");
-
-  return (data ?? []) as { id: string; constructor_ref: string; name: string; color_hex: string | null }[];
+  if (!hasDB()) return [];
+  const db = getDB();
+  const { results } = await db
+    .prepare(`SELECT id, constructor_ref, name, color_hex FROM constructors ORDER BY name`)
+    .all<{ id: string; constructor_ref: string; name: string; color_hex: string | null }>();
+  return results;
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
 
 export default async function TeamsPage() {
   const teams = await getTeams();
-  const supabase = hasPublicSupabaseConfig() ? createServerClient() : null;
 
-  // Get win counts per constructor for sorting
   let winMap = new Map<string, number>();
-  if (supabase) {
-    const { data: winRows } = await supabase
-      .from("results")
-      .select("constructor_id")
-      .eq("position", 1)
-      .eq("is_sprint", false);
-
-    for (const r of (winRows ?? []) as { constructor_id: string }[]) {
-      winMap.set(r.constructor_id, (winMap.get(r.constructor_id) ?? 0) + 1);
-    }
+  if (hasDB()) {
+    const db = getDB();
+    const { results: winRows } = await db
+      .prepare(`SELECT constructor_id FROM results WHERE position = 1 AND is_sprint = 0`)
+      .all<{ constructor_id: string }>();
+    for (const r of winRows) winMap.set(r.constructor_id, (winMap.get(r.constructor_id) ?? 0) + 1);
   }
 
   // Sort teams: most wins first

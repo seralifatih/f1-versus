@@ -8,11 +8,11 @@
  *   npx tsx scripts/compute-comparisons.ts
  *   npx tsx scripts/compute-comparisons.ts --driver=verstappen --driver=hamilton
  *   npx tsx scripts/compute-comparisons.ts --season=2021
- *   npx tsx scripts/compute-comparisons.ts --top=20   — only top N drivers by wins
+ *   npx tsx scripts/compute-comparisons.ts --top=20
  */
 
 import "dotenv/config";
-import { createClient } from "@supabase/supabase-js";
+import { createScriptDB } from "../lib/db/client";
 import { computeComparison } from "../lib/comparison/compute";
 import { buildComparisonSlug } from "../lib/data/types";
 import type { Driver, ComparisonResult } from "../lib/data/types";
@@ -23,11 +23,7 @@ import {
 
 // ─── Setup ─────────────────────────────────────────────────────────────────
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const db = createScriptDB();
 
 // Parse CLI args
 const args = process.argv.slice(2);
@@ -62,29 +58,34 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+function newId(): string {
+  return crypto.randomUUID();
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+// ─── DB helpers ────────────────────────────────────────────────────────────
+
 async function getExistingComparisonSlugs(season?: number): Promise<Set<string>> {
   const existing = new Set<string>();
-  let from = 0;
+  let offset = 0;
   const pageSize = 1000;
 
   while (true) {
-    let query = supabase
-      .from("driver_comparisons")
-      .select("slug")
-      .range(from, from + pageSize - 1);
+    const sql =
+      season === undefined
+        ? `SELECT slug FROM driver_comparisons WHERE season IS NULL LIMIT ? OFFSET ?`
+        : `SELECT slug FROM driver_comparisons WHERE season = ? LIMIT ? OFFSET ?`;
 
-    query = season === undefined ? query.is("season", null) : query.eq("season", season);
+    const { results } = season === undefined
+      ? await db.prepare(sql).bind(pageSize, offset).all<{ slug: string }>()
+      : await db.prepare(sql).bind(season, pageSize, offset).all<{ slug: string }>();
 
-    const { data, error: err } = await query;
-    if (err) throw err;
-    if (!data || data.length === 0) break;
-
-    for (const row of data as { slug: string }[]) {
-      existing.add(row.slug);
-    }
-
-    if (data.length < pageSize) break;
-    from += pageSize;
+    for (const row of results) existing.add(row.slug);
+    if (results.length < pageSize) break;
+    offset += pageSize;
   }
 
   return existing;
@@ -98,53 +99,52 @@ type DriverWithRange = Driver & {
 
 async function getDriverSeasonRanges(): Promise<Map<string, { firstSeason: number; lastSeason: number; raceStarts: number }>> {
   const rangeByDriver = new Map<string, { firstSeason: number; lastSeason: number; raceStarts: number }>();
-  let from = 0;
+  let offset = 0;
   const pageSize = 1000;
 
   while (true) {
-    const { data, error: err } = await supabase
-      .from("results")
-      .select("driver_id, races!inner(season)")
-      .range(from, from + pageSize - 1);
+    const { results } = await db
+      .prepare(
+        `SELECT r.driver_id, rc.season
+         FROM results r
+         JOIN races rc ON rc.id = r.race_id
+         LIMIT ? OFFSET ?`
+      )
+      .bind(pageSize, offset)
+      .all<{ driver_id: string; season: number }>();
 
-    if (err) throw err;
-    if (!data || data.length === 0) break;
-
-    for (const row of data as { driver_id: string; races: { season: number } | { season: number }[] | null }[]) {
-      const raceData = Array.isArray(row.races) ? row.races[0] : row.races;
-      const season = raceData?.season;
-      if (!row.driver_id || typeof season !== "number") continue;
-
+    for (const row of results) {
       const existing = rangeByDriver.get(row.driver_id);
       if (!existing) {
-        rangeByDriver.set(row.driver_id, { firstSeason: season, lastSeason: season, raceStarts: 1 });
+        rangeByDriver.set(row.driver_id, { firstSeason: row.season, lastSeason: row.season, raceStarts: 1 });
       } else {
-        existing.firstSeason = Math.min(existing.firstSeason, season);
-        existing.lastSeason = Math.max(existing.lastSeason, season);
+        existing.firstSeason = Math.min(existing.firstSeason, row.season);
+        existing.lastSeason = Math.max(existing.lastSeason, row.season);
         existing.raceStarts++;
       }
     }
 
-    if (data.length < pageSize) break;
-    from += pageSize;
+    if (results.length < pageSize) break;
+    offset += pageSize;
   }
 
   return rangeByDriver;
 }
 
-// ─── Driver selection ──────────────────────────────────────────────────────
-
 async function getDriversToCompute(): Promise<DriverWithRange[]> {
   const rangeByDriver = await getDriverSeasonRanges();
 
   if (driverArgs.length > 0) {
-    // Specific driver refs passed via CLI
-    const { data, error: err } = await supabase
-      .from("drivers")
-      .select("id, driver_ref, first_name, last_name, dob, nationality, headshot_url")
-      .in("driver_ref", driverArgs);
-    if (err) throw err;
-    return ((data ?? []) as Driver[])
+    const placeholders = driverArgs.map(() => "?").join(", ");
+    const { results } = await db
+      .prepare(
+        `SELECT id, driver_ref, first_name, last_name, dob, nationality, headshot_url
+         FROM drivers WHERE driver_ref IN (${placeholders})`
+      )
+      .bind(...driverArgs)
+      .all<Driver>();
+
+    return results
       .map((driver) => {
         const range = rangeByDriver.get(driver.id);
         return range ? { ...driver, ...range } : null;
@@ -153,28 +153,24 @@ async function getDriversToCompute(): Promise<DriverWithRange[]> {
   }
 
   if (topN !== null) {
-    // Top N drivers by win count
-    const { data: results } = await supabase
-      .from("results")
-      .select("driver_id")
-      .eq("position", 1);
+    const { results: winRows } = await db
+      .prepare(`SELECT driver_id, COUNT(*) as wins FROM results WHERE position = 1 GROUP BY driver_id ORDER BY wins DESC LIMIT ?`)
+      .bind(topN)
+      .all<{ driver_id: string; wins: number }>();
 
-    const winMap = new Map<string, number>();
-    for (const r of results ?? []) {
-      winMap.set(r.driver_id, (winMap.get(r.driver_id) ?? 0) + 1);
-    }
+    const topIds = winRows.map((r) => r.driver_id);
+    if (topIds.length === 0) return [];
 
-    const topDriverIds = Array.from(winMap.entries())
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, topN)
-      .map(([id]) => id);
+    const placeholders = topIds.map(() => "?").join(", ");
+    const { results } = await db
+      .prepare(
+        `SELECT id, driver_ref, first_name, last_name, dob, nationality, headshot_url
+         FROM drivers WHERE id IN (${placeholders})`
+      )
+      .bind(...topIds)
+      .all<Driver>();
 
-    const { data, error: err } = await supabase
-      .from("drivers")
-      .select("id, driver_ref, first_name, last_name, dob, nationality, headshot_url")
-      .in("id", topDriverIds);
-    if (err) throw err;
-    return ((data ?? []) as Driver[])
+    return results
       .map((driver) => {
         const range = rangeByDriver.get(driver.id);
         return range ? { ...driver, ...range } : null;
@@ -182,39 +178,36 @@ async function getDriversToCompute(): Promise<DriverWithRange[]> {
       .filter((d): d is DriverWithRange => d !== null && d.raceStarts >= 20);
   }
 
-  // All drivers who have at least one race result
+  // All drivers with at least one result
   const uniqueIds = new Set<string>();
-  let from = 0;
+  let offset = 0;
   const pageSize = 1000;
 
   while (true) {
-    const { data: raceDriverIds, error: resultsError } = await supabase
-      .from("results")
-      .select("driver_id")
-      .range(from, from + pageSize - 1);
+    const { results } = await db
+      .prepare(`SELECT DISTINCT driver_id FROM results LIMIT ? OFFSET ?`)
+      .bind(pageSize, offset)
+      .all<{ driver_id: string }>();
 
-    if (resultsError) throw resultsError;
-    if (!raceDriverIds || raceDriverIds.length === 0) break;
-
-    for (const row of raceDriverIds) {
-      uniqueIds.add(row.driver_id);
-    }
-
-    if (raceDriverIds.length < pageSize) break;
-    from += pageSize;
+    for (const row of results) uniqueIds.add(row.driver_id);
+    if (results.length < pageSize) break;
+    offset += pageSize;
   }
 
   const drivers: DriverWithRange[] = [];
   const idChunks = chunkArray([...uniqueIds], 200);
 
   for (const idChunk of idChunks) {
-    const { data, error: err } = await supabase
-      .from("drivers")
-      .select("id, driver_ref, first_name, last_name, dob, nationality, headshot_url")
-      .in("id", idChunk);
+    const placeholders = idChunk.map(() => "?").join(", ");
+    const { results } = await db
+      .prepare(
+        `SELECT id, driver_ref, first_name, last_name, dob, nationality, headshot_url
+         FROM drivers WHERE id IN (${placeholders})`
+      )
+      .bind(...idChunk)
+      .all<Driver>();
 
-    if (err) throw err;
-    for (const driver of (data ?? []) as Driver[]) {
+    for (const driver of results) {
       const range = rangeByDriver.get(driver.id);
       if (!range || range.raceStarts < 20) continue;
       drivers.push({ ...driver, ...range });
@@ -227,9 +220,6 @@ async function getDriversToCompute(): Promise<DriverWithRange[]> {
 
 // ─── Pair generation ───────────────────────────────────────────────────────
 
-/**
- * Generate all unique unordered pairs from an array.
- */
 function generatePairs(items: DriverWithRange[]): [DriverWithRange, DriverWithRange][] {
   const pairs: [DriverWithRange, DriverWithRange][] = [];
   for (let i = 0; i < items.length; i++) {
@@ -263,32 +253,39 @@ async function upsertComparison(
   season?: number
 ): Promise<void> {
   const result = await computeComparison(driverAId, driverBId, season ? { season } : {});
-
   const canonicalSlug = buildComparisonSlug(driverARef, driverBRef);
-
-  // Canonical ordering: whichever driver_ref sorts first alphabetically is driver_a
   const aIsCanonical = driverARef.localeCompare(driverBRef) <= 0;
   const canonicalAId = aIsCanonical ? driverAId : driverBId;
   const canonicalBId = aIsCanonical ? driverBId : driverAId;
+  const statsJson = JSON.stringify(result);
+  const ts = nowIso();
 
-  const { error: err } = await supabase.from("driver_comparisons").upsert(
-    {
-      driver_a_id: canonicalAId,
-      driver_b_id: canonicalBId,
-      slug: canonicalSlug,
-      season: season ?? null,
-      stats_json: result,
-      computed_stats: result,
-      last_computed_at: new Date().toISOString(),
-    },
-    { onConflict: "driver_a_id,driver_b_id,season" }
-  );
+  await db
+    .prepare(
+      `INSERT INTO driver_comparisons
+         (id, driver_a_id, driver_b_id, slug, season, stats_json, computed_stats, last_computed_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (driver_a_id, driver_b_id, season) DO UPDATE SET
+         slug             = excluded.slug,
+         stats_json       = excluded.stats_json,
+         computed_stats   = excluded.computed_stats,
+         last_computed_at = excluded.last_computed_at,
+         updated_at       = excluded.updated_at`
+    )
+    .bind(
+      newId(),
+      canonicalAId,
+      canonicalBId,
+      canonicalSlug,
+      season ?? null,
+      statsJson,
+      statsJson,
+      ts,
+      ts,
+      ts
+    )
+    .run();
 
-  if (err) {
-    throw new Error(`Failed to upsert comparison ${canonicalSlug}: ${err.message}`);
-  }
-
-  // Generate AI summary for career comparisons only (season=null pages are the product)
   if (!season) {
     await generateAndPersistSummary(canonicalSlug, result);
   }
@@ -296,34 +293,23 @@ async function upsertComparison(
 
 // ─── AI summary generation ─────────────────────────────────────────────────
 
-const SUMMARY_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SUMMARY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-/**
- * Check if a slug already has a fresh AI summary (< 7 days old).
- * Returns true if we should skip re-generation.
- */
 async function summaryIsFresh(slug: string): Promise<boolean> {
-  const { data } = await supabase
-    .from("driver_comparisons")
-    .select("ai_summary_generated_at")
-    .eq("slug", slug)
-    .is("season", null)
-    .single();
+  const row = await db
+    .prepare(
+      `SELECT ai_summary_generated_at FROM driver_comparisons
+       WHERE slug = ? AND season IS NULL`
+    )
+    .bind(slug)
+    .first<{ ai_summary_generated_at: string | null }>();
 
-  if (!data?.ai_summary_generated_at) return false;
-  const age = Date.now() - new Date(data.ai_summary_generated_at as string).getTime();
+  if (!row?.ai_summary_generated_at) return false;
+  const age = Date.now() - new Date(row.ai_summary_generated_at).getTime();
   return age < SUMMARY_TTL_MS;
 }
 
-/**
- * Generate and persist an AI summary for a comparison.
- * Uses Groq when GROQ_API_KEY is set, otherwise template fallback.
- * Skips if a fresh summary already exists.
- */
-async function generateAndPersistSummary(
-  slug: string,
-  result: ComparisonResult
-): Promise<void> {
+async function generateAndPersistSummary(slug: string, result: ComparisonResult): Promise<void> {
   try {
     const fresh = await summaryIsFresh(slug);
     if (fresh) {
@@ -345,18 +331,13 @@ async function generateAndPersistSummary(
       log(`  [AI] Template summary for ${slug} (no GROQ_API_KEY)`);
     }
 
-    const { error: updateErr } = await supabase
-      .from("driver_comparisons")
-      .update({
-        ai_summary: summary,
-        ai_summary_generated_at: new Date().toISOString(),
-      })
-      .eq("slug", slug)
-      .is("season", null);
-
-    if (updateErr) {
-      warn(`  [AI] Failed to persist summary for ${slug}: ${updateErr.message}`);
-    }
+    await db
+      .prepare(
+        `UPDATE driver_comparisons SET ai_summary = ?, ai_summary_generated_at = ?
+         WHERE slug = ? AND season IS NULL`
+      )
+      .bind(summary, nowIso(), slug)
+      .run();
   } catch (err) {
     warn(`  [AI] Unexpected error for ${slug}: ${String(err)}`);
   }
@@ -364,82 +345,60 @@ async function generateAndPersistSummary(
 
 // ─── Distribution computation ─────────────────────────────────────────────
 
-/**
- * Compute percentile distributions for all radar metrics from the stored
- * driver_comparisons rows, then upsert into metric_distributions.
- *
- * We collect one canonical stat record per driver (deduped by driver_ref)
- * from the all-time (season=null) comparisons, then compute p10/p50/p90/max
- * for each raw metric key.
- */
 async function computeAndUpsertDistributions(): Promise<void> {
   log("Computing metric distributions...");
 
-  // Fetch all all-time comparisons — we only need the stats_json
-  const allStats: Array<{
+  type StatRow = {
     driverRef: string;
     winRate: number;
     poleRate: number;
     podiumRate: number;
-    reliability: number;      // 1 - dnfRate
+    reliability: number;
     pointsPerRace: number;
     consistencyScore: number;
-    avgFinishInverted: number; // 21 - avgFinishPosition
+    avgFinishInverted: number;
     avgPositionsGained: number;
-  }> = [];
+  };
 
+  const allStats: StatRow[] = [];
   const seenDrivers = new Set<string>();
-  let from = 0;
+  let offset = 0;
   const pageSize = 500;
 
   while (true) {
-    const { data, error: err } = await supabase
-      .from("driver_comparisons")
-      .select("stats_json")
-      .is("season", null)
-      .range(from, from + pageSize - 1);
+    const { results } = await db
+      .prepare(
+        `SELECT stats_json FROM driver_comparisons WHERE season IS NULL LIMIT ? OFFSET ?`
+      )
+      .bind(pageSize, offset)
+      .all<{ stats_json: string }>();
 
-    if (err) throw err;
-    if (!data || data.length === 0) break;
-
-    for (const row of data as { stats_json: { statsA?: Record<string, number>; statsB?: Record<string, number>; driverA?: { driver_ref: string }; driverB?: { driver_ref: string } } | null }[]) {
+    for (const row of results) {
       if (!row.stats_json) continue;
-      const { statsA, statsB, driverA, driverB } = row.stats_json as unknown as {
+      let parsed: {
         statsA: {
-          driverRef: string;
-          totalRaces: number;
-          wins: number;
-          poles: number;
-          podiums: number;
-          dnfs: number;
-          pointsPerRace: number;
-          consistencyScore: number;
-          avgFinishPosition: number;
-          avgPositionsGained: number;
+          driverRef: string; totalRaces: number; wins: number; poles: number;
+          podiums: number; dnfs: number; pointsPerRace: number;
+          consistencyScore: number; avgFinishPosition: number; avgPositionsGained: number;
         };
         statsB: {
-          driverRef: string;
-          totalRaces: number;
-          wins: number;
-          poles: number;
-          podiums: number;
-          dnfs: number;
-          pointsPerRace: number;
-          consistencyScore: number;
-          avgFinishPosition: number;
-          avgPositionsGained: number;
+          driverRef: string; totalRaces: number; wins: number; poles: number;
+          podiums: number; dnfs: number; pointsPerRace: number;
+          consistencyScore: number; avgFinishPosition: number; avgPositionsGained: number;
         };
-        driverA: { driver_ref: string };
-        driverB: { driver_ref: string };
       };
+      try {
+        parsed = JSON.parse(row.stats_json);
+      } catch {
+        continue;
+      }
 
-      for (const [stats] of [[statsA], [statsB]] as const) {
-        if (!stats || !stats.driverRef) continue;
+      for (const stats of [parsed.statsA, parsed.statsB]) {
+        if (!stats?.driverRef) continue;
         if (seenDrivers.has(stats.driverRef)) continue;
         if (!stats.totalRaces || stats.totalRaces < 20) continue;
 
         seenDrivers.add(stats.driverRef);
-
         const safe = (n: unknown): number => (typeof n === "number" && isFinite(n) ? n : 0);
 
         allStats.push({
@@ -456,8 +415,8 @@ async function computeAndUpsertDistributions(): Promise<void> {
       }
     }
 
-    if (data.length < pageSize) break;
-    from += pageSize;
+    if (results.length < pageSize) break;
+    offset += pageSize;
   }
 
   if (allStats.length === 0) {
@@ -467,14 +426,6 @@ async function computeAndUpsertDistributions(): Promise<void> {
 
   log(`Computing distributions from ${allStats.length} driver stat records`);
 
-  type DistributionRow = {
-    metric_name: string;
-    p10: number;
-    p50: number;
-    p90: number;
-    max: number;
-  };
-
   function computeDist(values: number[]): { p10: number; p50: number; p90: number; max: number } {
     const sorted = [...values].sort((a, b) => a - b);
     const n = sorted.length;
@@ -482,36 +433,35 @@ async function computeAndUpsertDistributions(): Promise<void> {
       const idx = Math.floor((pct / 100) * (n - 1));
       return sorted[Math.max(0, Math.min(n - 1, idx))];
     };
-    return {
-      p10: at(10),
-      p50: at(50),
-      p90: at(90),
-      max: sorted[n - 1],
-    };
+    return { p10: at(10), p50: at(50), p90: at(90), max: sorted[n - 1] };
   }
 
-  const metricKeys: Array<keyof typeof allStats[0]> = [
+  type MetricKey = keyof Omit<StatRow, "driverRef">;
+  const metricKeys: MetricKey[] = [
     "winRate", "poleRate", "podiumRate", "reliability",
     "pointsPerRace", "consistencyScore", "avgFinishInverted", "avgPositionsGained",
   ];
 
-  const rows: DistributionRow[] = metricKeys.map((key) => {
+  const ts = nowIso();
+  for (const key of metricKeys) {
     const values = allStats.map((s) => s[key] as number);
-    return { metric_name: key as string, ...computeDist(values) };
-  });
+    const dist = computeDist(values);
 
-  const { error: upsertErr } = await supabase
-    .from("metric_distributions")
-    .upsert(rows, { onConflict: "metric_name" });
+    await db
+      .prepare(
+        `INSERT INTO metric_distributions (metric_name, p10, p50, p90, max, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (metric_name) DO UPDATE SET
+           p10 = excluded.p10, p50 = excluded.p50,
+           p90 = excluded.p90, max = excluded.max, updated_at = excluded.updated_at`
+      )
+      .bind(key, dist.p10, dist.p50, dist.p90, dist.max, ts)
+      .run();
 
-  if (upsertErr) {
-    throw new Error(`Failed to upsert metric distributions: ${upsertErr.message}`);
+    log(`  ${key}: p10=${dist.p10.toFixed(3)} p50=${dist.p50.toFixed(3)} p90=${dist.p90.toFixed(3)} max=${dist.max.toFixed(3)}`);
   }
 
-  log(`✓ Upserted ${rows.length} metric distribution rows`);
-  for (const r of rows) {
-    log(`  ${r.metric_name}: p10=${r.p10.toFixed(3)} p50=${r.p50.toFixed(3)} p90=${r.p90.toFixed(3)} max=${r.max.toFixed(3)}`);
-  }
+  log(`✓ Upserted ${metricKeys.length} metric distribution rows`);
 }
 
 // ─── Main ──────────────────────────────────────────────────────────────────
@@ -527,11 +477,6 @@ async function main(): Promise<void> {
         : "all drivers"
     }${forceSeason ? ` (season ${forceSeason})` : " (all-time)"}`
   );
-
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
-    process.exit(1);
-  }
 
   const startTime = Date.now();
 
@@ -551,8 +496,7 @@ async function main(): Promise<void> {
       return !existingSlugs.has(slug);
     });
 
-    const pairsToProcess =
-      maxComparisons !== null ? pairs.slice(0, maxComparisons) : pairs;
+    const pairsToProcess = maxComparisons !== null ? pairs.slice(0, maxComparisons) : pairs;
 
     log(
       `Generating ${pairsToProcess.length} comparisons... (${existingSlugs.size} already computed and skipped${maxComparisons !== null ? `, capped at ${maxComparisons}` : ""})`
@@ -566,16 +510,8 @@ async function main(): Promise<void> {
       const slug = buildComparisonSlug(driverA.driver_ref, driverB.driver_ref);
 
       try {
-        log(
-          `[${i + 1}/${pairsToProcess.length}] Computing ${slug}${forceSeason ? ` (${forceSeason})` : ""}...`
-        );
-        await upsertComparison(
-          driverA.id,
-          driverB.id,
-          driverA.driver_ref,
-          driverB.driver_ref,
-          forceSeason
-        );
+        log(`[${i + 1}/${pairsToProcess.length}] Computing ${slug}${forceSeason ? ` (${forceSeason})` : ""}...`);
+        await upsertComparison(driverA.id, driverB.id, driverA.driver_ref, driverB.driver_ref, forceSeason);
         succeeded++;
       } catch (err) {
         warn(`Failed to compute ${slug}: ${String(err)}`);
@@ -599,8 +535,6 @@ async function main(): Promise<void> {
     log(`  Succeeded: ${succeeded}`);
     if (failed > 0) log(`  Failed: ${failed}`);
 
-    // Only compute distributions on a full all-time run (not season-scoped or
-    // partial runs) — we need the full population for meaningful percentiles.
     if (!forceSeason && !maxComparisons) {
       await computeAndUpsertDistributions();
     }

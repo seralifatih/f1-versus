@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { createServerClient, hasPublicSupabaseConfig } from "@/lib/supabase/client";
+import { getDB, hasDB } from "@/lib/db/client";
 
 export const metadata: Metadata = {
   title: "All F1 Driver Comparisons | F1-Versus",
@@ -28,79 +28,71 @@ interface ComparisonRow {
 // ─── Data ──────────────────────────────────────────────────────────────────
 
 async function getAllComparisons(): Promise<ComparisonRow[]> {
-  if (!hasPublicSupabaseConfig()) {
-    return [];
-  }
+  if (!hasDB()) return [];
 
-  const supabase = createServerClient();
+  const db = getDB();
   const currentYear = new Date().getFullYear();
 
-  const { data: comps } = await supabase
-    .from("driver_comparisons")
-    .select(
-      `slug,
-       driver_a:drivers!driver_comparisons_driver_a_id_fkey(id, driver_ref, first_name, last_name),
-       driver_b:drivers!driver_comparisons_driver_b_id_fkey(id, driver_ref, first_name, last_name)`
+  const { results: comps } = await db
+    .prepare(
+      `SELECT dc.slug,
+              da.id AS a_id, da.driver_ref AS a_ref, da.first_name AS a_first, da.last_name AS a_last,
+              db.id AS b_id, db.driver_ref AS b_ref, db.first_name AS b_first, db.last_name AS b_last
+       FROM driver_comparisons dc
+       JOIN drivers da ON da.id = dc.driver_a_id
+       JOIN drivers db ON db.id = dc.driver_b_id
+       WHERE dc.season IS NULL
+       ORDER BY dc.slug`
     )
-    .is("season", null)
-    .order("slug");
+    .all<{
+      slug: string;
+      a_id: string; a_ref: string; a_first: string; a_last: string;
+      b_id: string; b_ref: string; b_first: string; b_last: string;
+    }>();
 
-  if (!comps) return [];
+  if (comps.length === 0) return [];
 
-  type DRow = { id: number; driver_ref: string; first_name: string; last_name: string };
+  const allRefs = comps.flatMap((c) => [c.a_ref, c.b_ref]);
+  const allIds  = comps.flatMap((c) => [c.a_id,  c.b_id]);
 
-  const driverRefs = comps.flatMap((c) => [
-    (c.driver_a as unknown as DRow).driver_ref,
-    (c.driver_b as unknown as DRow).driver_ref,
+  const refPlaceholders = allRefs.map(() => "?").join(", ");
+  const idPlaceholders  = allIds.map(() => "?").join(", ");
+
+  const [{ results: colorRows }, { results: currentResults }] = await Promise.all([
+    db.prepare(
+      `SELECT d.driver_ref, c.color_hex
+       FROM results r
+       JOIN drivers d ON d.id = r.driver_id
+       JOIN constructors c ON c.id = r.constructor_id
+       WHERE d.driver_ref IN (${refPlaceholders}) AND r.is_sprint = 0
+       ORDER BY r.race_id DESC`
+    ).bind(...allRefs).all<{ driver_ref: string; color_hex: string }>(),
+
+    db.prepare(
+      `SELECT DISTINCT r.driver_id
+       FROM results r
+       JOIN races rc ON rc.id = r.race_id
+       WHERE rc.season = ? AND r.is_sprint = 0 AND r.driver_id IN (${idPlaceholders})`
+    ).bind(currentYear, ...allIds).all<{ driver_id: string }>(),
   ]);
-
-  const driverIds = comps.flatMap((c) => [
-    (c.driver_a as unknown as DRow).id,
-    (c.driver_b as unknown as DRow).id,
-  ]);
-
-  // Team colors
-  const { data: colorRows } = await supabase
-    .from("results")
-    .select("drivers!inner(driver_ref), constructors!inner(color_hex)")
-    .in("drivers.driver_ref", driverRefs)
-    .eq("is_sprint", false)
-    .order("race_id", { ascending: false });
 
   const colorMap = new Map<string, string>();
-  for (const row of colorRows ?? []) {
-    const ref = (row.drivers as unknown as { driver_ref: string }).driver_ref;
-    const color = (row.constructors as unknown as { color_hex: string }).color_hex;
-    if (!colorMap.has(ref) && color) colorMap.set(ref, color);
+  for (const row of colorRows) {
+    if (!colorMap.has(row.driver_ref) && row.color_hex) colorMap.set(row.driver_ref, row.color_hex);
   }
+  const currentSet = new Set(currentResults.map((r) => r.driver_id));
 
-  // Current-season drivers
-  const { data: currentResults } = await supabase
-    .from("results")
-    .select("driver_id, races!inner(season)")
-    .eq("races.season", currentYear)
-    .eq("is_sprint", false)
-    .in("driver_id", driverIds);
-
-  const currentSet = new Set((currentResults ?? []).map((r: { driver_id: number }) => r.driver_id));
-
-  return comps
-    .filter((c) => c.slug)
-    .map((c) => {
-      const a = c.driver_a as unknown as DRow;
-      const b = c.driver_b as unknown as DRow;
-      return {
-        slug: c.slug as string,
-        firstNameA: a.first_name,
-        lastNameA: a.last_name,
-        firstNameB: b.first_name,
-        lastNameB: b.last_name,
-        colorA: colorMap.get(a.driver_ref) ?? null,
-        colorB: colorMap.get(b.driver_ref) ?? null,
-        isCurrentA: currentSet.has(a.id),
-        isCurrentB: currentSet.has(b.id),
-      };
-    });
+  return comps.map((c) => ({
+    slug: c.slug,
+    firstNameA: c.a_first,
+    lastNameA: c.a_last,
+    firstNameB: c.b_first,
+    lastNameB: c.b_last,
+    colorA: colorMap.get(c.a_ref) ?? null,
+    colorB: colorMap.get(c.b_ref) ?? null,
+    isCurrentA: currentSet.has(c.a_id),
+    isCurrentB: currentSet.has(c.b_id),
+  }));
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────

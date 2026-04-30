@@ -1,0 +1,91 @@
+name: Sync F1 Data
+
+on:
+  # Run manually from GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Sync mode'
+        required: true
+        default: 'incremental'
+        type: choice
+        options:
+          - incremental
+          - full
+  # Weekly auto-sync: Monday 06:00 UTC (after race weekend data lands)
+  schedule:
+    - cron: '0 6 * * 1'
+
+jobs:
+  sync:
+    name: Sync + Compute + Deploy
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      VOTE_IP_HASH_SECRET: ${{ secrets.VOTE_IP_HASH_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Init local D1 SQLite ───────────────────────────────────────────────
+      # Pull down current remote DB so incremental sync resumes correctly.
+      # For 'full' mode we start fresh.
+      - name: Export current remote DB (incremental only)
+        if: github.event.inputs.mode != 'full'
+        run: npx wrangler d1 export f1-versus-db --remote --output=f1-versus-current.sql
+        continue-on-error: true  # first run: remote DB may be empty
+
+      - name: Init local D1 with schema
+        run: npx wrangler d1 execute f1-versus-db --local --file=db/schema.sql
+
+      - name: Seed constructor colors
+        run: npx wrangler d1 execute f1-versus-db --local --file=db/seed.sql
+
+      - name: Import current remote data into local (incremental only)
+        if: github.event.inputs.mode != 'full'
+        run: |
+          if [ -f f1-versus-current.sql ]; then
+            npx wrangler d1 execute f1-versus-db --local --file=f1-versus-current.sql
+          fi
+
+      # ── Sync F1 data from Jolpica ─────────────────────────────────────────
+      - name: Sync data (incremental)
+        if: github.event.inputs.mode != 'full'
+        run: npm run sync:incremental
+
+      - name: Sync data (full)
+        if: github.event.inputs.mode == 'full'
+        run: npm run sync
+
+      # ── Pre-compute comparisons ───────────────────────────────────────────
+      - name: Compute comparisons
+        run: npm run compute
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+      # ── Upload updated SQLite to remote D1 ────────────────────────────────
+      - name: Export local DB to SQL
+        run: npx wrangler d1 export f1-versus-db --local --output=f1-versus-updated.sql
+
+      - name: Apply schema to remote (idempotent)
+        run: npx wrangler d1 execute f1-versus-db --remote --file=db/schema.sql
+
+      - name: Import updated data into remote D1
+        run: npx wrangler d1 execute f1-versus-db --remote --file=f1-versus-updated.sql
+
+      # ── Rebuild + deploy static pages ────────────────────────────────────
+      - name: Build
+        run: npx @opennextjs/cloudflare build
+
+      - name: Deploy
+        run: npx @opennextjs/cloudflare deploy
