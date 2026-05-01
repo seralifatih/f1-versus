@@ -54,20 +54,30 @@ export interface D1ExecResult {
  * @opennextjs/cloudflare exposes bindings via `process.env` as live objects.
  */
 export function getDB(): D1Database {
-  // In CF runtime the binding is a live D1Database object on process.env
-  const db = (process.env as unknown as Record<string, unknown>).DB as D1Database | undefined;
-  if (!db) {
-    throw new Error(
-      "D1 binding 'DB' not found. " +
-        "In production this is injected by Cloudflare. " +
-        "Locally, run `wrangler dev` or use the script DB client."
-    );
-  }
-  return db;
+  // Access the D1 binding via the Cloudflare Workers global context.
+  // @opennextjs/cloudflare stores the CF env on globalThis[Symbol.for("__cloudflare-context__")]
+  const cfCtx = (globalThis as unknown as Record<symbol, { env?: Record<string, unknown> }>)[
+    Symbol.for("__cloudflare-context__")
+  ];
+  const db = cfCtx?.env?.DB as D1Database | undefined;
+  if (db) return db;
+
+  throw new Error(
+    "D1 binding 'DB' not found. " +
+      "In production this is set by @opennextjs/cloudflare on globalThis. " +
+      "Locally, run `wrangler dev` or use the script DB client."
+  );
 }
 
 export function hasDB(): boolean {
-  return Boolean((process.env as unknown as Record<string, unknown>).DB);
+  try {
+    const cfCtx = (globalThis as unknown as Record<symbol, { env?: Record<string, unknown> }>)[
+      Symbol.for("__cloudflare-context__")
+    ];
+    return Boolean(cfCtx?.env?.DB);
+  } catch {
+    return false;
+  }
 }
 
 // ─── Script client (local better-sqlite3) ─────────────────────────────────
