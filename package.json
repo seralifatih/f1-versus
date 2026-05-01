@@ -8,17 +8,19 @@
     "start": "next start",
     "lint": "next lint",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "deploy": "opennextjs-cloudflare build --dangerouslyUseUnsupportedNextVersion && node scripts/fix-opennext-windows.mjs && opennextjs-cloudflare deploy",
     "cf:deploy": "wrangler deploy",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "sync": "npx tsx scripts/sync-data.ts",
     "sync:incremental": "npx tsx scripts/sync-data.ts --incremental",
     "compute": "npx tsx scripts/compute-comparisons.ts",
+    "migrate": "npx tsx scripts/migrate-supabase-to-d1.ts",
+    "push-d1": "npx tsx scripts/push-to-d1.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "1.15.1",
+    "@opennextjs/cloudflare": "^1.19.5",
     "@vercel/og": "^0.6.2",
     "clsx": "^2.1.1",
     "dotenv": "^16.4.5",
@@ -31,6 +33,7 @@
     "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.105.1",
     "@tailwindcss/typography": "^0.5.13",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.14.0",

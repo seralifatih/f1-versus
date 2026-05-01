@@ -131,14 +131,7 @@ export function FilterableComparison({
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h2
-      className="mb-4 text-lg font-bold uppercase tracking-wider"
-      style={{ color: "var(--muted-foreground)" }}
-    >
-      {children}
-    </h2>
-  );
+  return <div className="f1-section-label mb-4">{children}</div>;
 }
 
 function FilterBadge({ filters }: { filters: ComparisonFilters }) {

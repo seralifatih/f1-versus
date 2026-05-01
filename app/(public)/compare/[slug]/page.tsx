@@ -624,7 +624,7 @@ export default async function ComparePage({
     relatedComparisonsResult.status === "fulfilled" ? relatedComparisonsResult.value : [];
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+    <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
       {/* ── Analytics: fire comparison_viewed on mount ─────────────────── */}
       <ComparisonViewTracker slug={params.slug} />
       {/* ── JSON-LD structured data (FAQ + BreadcrumbList) ─────────────── */}
@@ -859,9 +859,7 @@ function RelatedComparisons({
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mb-4 text-lg font-bold uppercase tracking-wider" style={{ color: "var(--muted-foreground)" }}>
-      {children}
-    </h2>
+    <div className="f1-section-label mb-4">{children}</div>
   );
 }
 
@@ -892,109 +890,97 @@ function HeroHeader({
   sharedSeasons: number[];
 }) {
   return (
-    <header className="mb-10">
+    <header className="mb-8">
       <div
-        className="overflow-hidden rounded-2xl"
-        style={{ border: "1px solid var(--border)" }}
+        className="f1-hero f1-scanlines rounded-xl overflow-hidden"
+        style={{ border: `1px solid rgba(255,255,255,0.06)` }}
       >
-        {/* Mobile: stacked row, Desktop: side-by-side */}
-        <div className="flex items-stretch sm:flex-row flex-col">
-          {/* Driver A side */}
-          <div
-            className="flex flex-1 flex-col items-center gap-3 px-6 py-6 sm:py-8"
-            style={{ borderLeft: `4px solid ${colorA}` }}
-          >
-            <Link href={`/drivers/${driverA.driver_ref}`} style={{ display: "block" }} title={`${driverA.first_name} ${driverA.last_name} profile`}>
-              <DriverAvatar driver={driverA} color={colorA} size={72} />
-            </Link>
-            <div className="text-center">
-              <p className="text-sm font-medium" style={{ color: colorA }}>
-                {driverA.first_name}
-              </p>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight">{driverA.last_name}</h1>
-              {driverA.nationality && (
-                <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
-                  {driverA.nationality}
-                </p>
-              )}
-            </div>
-          </div>
+        {/* Corner brackets */}
+        <div className="f1-corner f1-corner--tl" style={{ color: colorA }} />
+        <div className="f1-corner f1-corner--tr" style={{ color: colorB }} />
+        <div className="f1-corner f1-corner--bl" style={{ color: colorA }} />
+        <div className="f1-corner f1-corner--br" style={{ color: colorB }} />
 
-          {/* Centre VS badge — horizontal on mobile, vertical on desktop */}
-          <div
-            className="flex shrink-0 items-center justify-center gap-2 sm:gap-1 sm:flex-col px-4 py-3 sm:py-0"
-            style={{ backgroundColor: "var(--surface-elevated)" }}
+        {/* Split background glow */}
+        <div style={{ position: "absolute", inset: 0, zIndex: 0,
+          background: `linear-gradient(105deg, ${colorA}18 0%, transparent 45%, transparent 55%, ${colorB}18 100%)` }} />
+
+        <div style={{ position: "relative", zIndex: 2, display: "grid", gridTemplateColumns: "1fr auto 1fr", minHeight: 200 }}>
+
+          {/* ── Driver A ── */}
+          <Link
+            href={`/drivers/${driverA.driver_ref}`}
+            style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "32px 24px 32px 32px", textDecoration: "none", position: "relative" }}
           >
-            <span className="text-xs font-bold tracking-widest" style={{ color: "var(--muted-foreground)" }}>
-              VS
+            {/* Ghost last name */}
+            <span className="f1-driver-number" style={{ color: colorA, right: 0, bottom: -8 }}>
+              {driverA.last_name.toUpperCase()}
             </span>
+            {/* Nationality eyebrow */}
+            {driverA.nationality && (
+              <span className="f1-name-first" style={{ color: colorA, marginBottom: 4 }}>
+                {driverA.nationality}
+              </span>
+            )}
+            {/* First name */}
+            <span style={{ fontFamily: "var(--font-condensed)", fontWeight: 600, fontSize: 15, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(255,255,255,0.6)", marginBottom: 2 }}>
+              {driverA.first_name}
+            </span>
+            {/* Last name */}
+            <h1 className="f1-name-last" style={{ color: colorA, fontSize: "clamp(28px, 5vw, 52px)" }}>
+              {driverA.last_name}
+            </h1>
+            {/* Team color bar */}
+            <div style={{ width: 40, height: 3, backgroundColor: colorA, marginTop: 10, borderRadius: 2 }} />
+            {/* Avatar */}
+            {driverA.headshot_url && (
+              <div style={{ position: "absolute", right: 16, bottom: 0, opacity: 0.25 }}>
+                <Image src={driverA.headshot_url} alt={driverA.last_name} width={80} height={80} style={{ objectFit: "cover", borderRadius: "50%" }} />
+              </div>
+            )}
+          </Link>
+
+          {/* ── VS Centre ── */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 8px", gap: 8, zIndex: 2 }}>
+            {/* Big VS ghost text */}
+            <span className="f1-vs-text">VS</span>
             {sharedSeasons.length > 0 && (
-              <span className="text-xs text-center" style={{ color: "var(--muted-foreground)", maxWidth: 80 }}>
+              <span style={{ fontFamily: "var(--font-condensed)", fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap" }}>
                 {sharedSeasons.length} shared season{sharedSeasons.length !== 1 ? "s" : ""}
               </span>
             )}
           </div>
 
-          {/* Driver B side */}
-          <div
-            className="flex flex-1 flex-col items-center gap-3 px-6 py-6 sm:py-8"
-            style={{ borderRight: `4px solid ${colorB}` }}
+          {/* ── Driver B ── */}
+          <Link
+            href={`/drivers/${driverB.driver_ref}`}
+            style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-end", padding: "32px 32px 32px 24px", textDecoration: "none", position: "relative", textAlign: "right" }}
           >
-            <Link href={`/drivers/${driverB.driver_ref}`} style={{ display: "block" }} title={`${driverB.first_name} ${driverB.last_name} profile`}>
-              <DriverAvatar driver={driverB} color={colorB} size={72} />
-            </Link>
-            <div className="text-center">
-              <p className="text-sm font-medium" style={{ color: colorB }}>
-                {driverB.first_name}
-              </p>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight">{driverB.last_name}</h1>
-              {driverB.nationality && (
-                <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
-                  {driverB.nationality}
-                </p>
-              )}
-            </div>
-          </div>
+            {/* Ghost last name */}
+            <span className="f1-driver-number" style={{ color: colorB, left: 0, bottom: -8 }}>
+              {driverB.last_name.toUpperCase()}
+            </span>
+            {driverB.nationality && (
+              <span className="f1-name-first" style={{ color: colorB, marginBottom: 4 }}>
+                {driverB.nationality}
+              </span>
+            )}
+            <span style={{ fontFamily: "var(--font-condensed)", fontWeight: 600, fontSize: 15, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(255,255,255,0.6)", marginBottom: 2 }}>
+              {driverB.first_name}
+            </span>
+            <h1 className="f1-name-last" style={{ color: colorB, fontSize: "clamp(28px, 5vw, 52px)" }}>
+              {driverB.last_name}
+            </h1>
+            <div style={{ width: 40, height: 3, backgroundColor: colorB, marginTop: 10, borderRadius: 2, marginLeft: "auto" }} />
+            {driverB.headshot_url && (
+              <div style={{ position: "absolute", left: 16, bottom: 0, opacity: 0.25 }}>
+                <Image src={driverB.headshot_url} alt={driverB.last_name} width={80} height={80} style={{ objectFit: "cover", borderRadius: "50%" }} />
+              </div>
+            )}
+          </Link>
         </div>
       </div>
     </header>
-  );
-}
-
-function DriverAvatar({
-  driver,
-  color,
-  size,
-}: {
-  driver: Driver;
-  color: string;
-  size: number;
-}) {
-  const initials = `${driver.first_name[0]}${driver.last_name[0]}`;
-  return driver.headshot_url ? (
-    <Image
-      src={driver.headshot_url}
-      alt={`${driver.first_name} ${driver.last_name}`}
-      width={size}
-      height={size}
-      className="rounded-full object-cover"
-      style={{ border: `2px solid ${color}` }}
-      priority={size >= 72}
-    />
-  ) : (
-    <div
-      className="flex items-center justify-center rounded-full font-black"
-      style={{
-        width: size,
-        height: size,
-        border: `2px solid ${color}`,
-        backgroundColor: "var(--surface-elevated)",
-        color,
-        fontSize: size * 0.35,
-      }}
-    >
-      {initials}
-    </div>
   );
 }
 
@@ -1023,91 +1009,119 @@ function QuickVerdict({
   const pctA = total > 0 ? (headToHead.driverAWins / total) * 100 : 50;
   const pctB = total > 0 ? (headToHead.driverBWins / total) * 100 : 50;
 
-  return (
-    <section className="mb-10">
-      <SectionTitle>Quick Verdict</SectionTitle>
-      <Card className="p-6">
-        {/* AI / template summary */}
-        <div className="mb-6">
-          <div className="mb-2 flex items-center gap-2">
-            {aiSummary.isAI ? (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  color: "#a78bfa",
-                  backgroundColor: "rgba(167,139,250,0.1)",
-                  border: "1px solid rgba(167,139,250,0.25)",
-                  borderRadius: 4,
-                  padding: "2px 7px",
-                }}
-              >
-                {/* Sparkle icon */}
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
-                </svg>
-                AI Analysis
-              </span>
-            ) : (
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  color: "#555",
-                }}
-              >
-                Analysis
-              </span>
-            )}
-          </div>
-          <p className="text-base leading-relaxed" style={{ color: "var(--foreground)" }}>
-            {aiSummary.text}
-          </p>
-        </div>
+  // Key stats for the quick glance row
+  const quickStats = [
+    { label: "Wins",    a: statsA.wins,    b: statsB.wins },
+    { label: "Poles",   a: statsA.poles,   b: statsB.poles },
+    { label: "Podiums", a: statsA.podiums, b: statsB.podiums },
+    { label: "Races",   a: statsA.totalRaces, b: statsB.totalRaces },
+  ];
 
-        {/* H2H bar */}
+  return (
+    <section className="mb-8">
+      {/* Quick stats bar */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${quickStats.length}, 1fr)`,
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 12,
+          overflow: "hidden",
+          marginBottom: 2,
+          background: "#0a0a0a",
+        }}
+      >
+        {quickStats.map((s, i) => {
+          const aLeads = s.a > s.b;
+          const bLeads = s.b > s.a;
+          return (
+            <div
+              key={s.label}
+              style={{
+                borderLeft: i > 0 ? "1px solid rgba(255,255,255,0.07)" : "none",
+                padding: "16px 12px",
+                background: aLeads
+                  ? `linear-gradient(160deg, ${colorA}12, transparent)`
+                  : bLeads
+                  ? `linear-gradient(200deg, transparent, ${colorB}12)`
+                  : undefined,
+              }}
+            >
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 4 }}>
+                <span
+                  className="f1-stat-value"
+                  style={{ color: aLeads ? colorA : "#fff", textAlign: "right", textShadow: aLeads ? `0 0 20px ${colorA}66` : "none" }}
+                >
+                  {s.a}
+                </span>
+                <span className="f1-stat-label" style={{ fontSize: 10 }}>{s.label}</span>
+                <span
+                  className="f1-stat-value"
+                  style={{ color: bLeads ? colorB : "#fff", textAlign: "left", textShadow: bLeads ? `0 0 20px ${colorB}66` : "none" }}
+                >
+                  {s.b}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* H2H bar + AI summary + Vote */}
+      <div style={{ border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, overflow: "hidden", background: "#0a0a0a" }}>
+
+        {/* H2H progress bar */}
         {total > 0 && (
-          <div className="mb-6">
-            <div className="mb-2 flex justify-between text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
-              <span style={{ color: colorA }}>{headToHead.driverAWins} ahead</span>
-              <span>{headToHead.totalRaces} shared races</span>
-              <span style={{ color: colorB }}>{headToHead.driverBWins} ahead</span>
+          <div style={{ padding: "16px 20px 12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontFamily: "var(--font-condensed)", fontSize: 13, fontWeight: 700, color: colorA }}>
+                {headToHead.driverAWins} ahead
+              </span>
+              <span style={{ fontFamily: "var(--font-condensed)", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)" }}>
+                {headToHead.totalRaces} shared races
+              </span>
+              <span style={{ fontFamily: "var(--font-condensed)", fontSize: 13, fontWeight: 700, color: colorB }}>
+                {headToHead.driverBWins} ahead
+              </span>
             </div>
-            <div className="flex h-3 overflow-hidden rounded-full" style={{ backgroundColor: "var(--border)" }}>
-              <div style={{ width: `${pctA}%`, backgroundColor: colorA, transition: "width 0.4s ease" }} />
+            <div style={{ display: "flex", height: 6, borderRadius: 3, overflow: "hidden", background: "#1a1a1a" }}>
+              <div style={{ width: `${pctA}%`, background: colorA, boxShadow: `0 0 8px ${colorA}88` }} />
               {headToHead.ties > 0 && (
-                <div style={{ width: `${(headToHead.ties / total) * 100}%`, backgroundColor: "var(--muted)" }} />
+                <div style={{ width: `${(headToHead.ties / total) * 100}%`, background: "#333" }} />
               )}
-              <div style={{ width: `${pctB}%`, backgroundColor: colorB, transition: "width 0.4s ease" }} />
-            </div>
-            <div className="mt-1 flex justify-between text-xs font-semibold">
-              <span style={{ color: colorA }}>{driverA.last_name}</span>
-              {headToHead.ties > 0 && (
-                <span style={{ color: "var(--muted-foreground)" }}>{headToHead.ties} tied</span>
-              )}
-              <span style={{ color: colorB }}>{driverB.last_name}</span>
+              <div style={{ width: `${pctB}%`, background: colorB, boxShadow: `0 0 8px ${colorB}88` }} />
             </div>
           </div>
         )}
 
-        {/* Community vote — client component, shows results only after voting */}
-        <VoteWidget
-          slug={`${driverA.driver_ref}-vs-${driverB.driver_ref}`}
-          driverARef={driverA.driver_ref}
-          driverBRef={driverB.driver_ref}
-          nameA={`${driverA.first_name} ${driverA.last_name}`}
-          nameB={`${driverB.first_name} ${driverB.last_name}`}
-          colorA={colorA}
-          colorB={colorB}
-        />
-      </Card>
+        {/* AI summary */}
+        <div style={{ padding: "12px 20px 16px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            {aiSummary.isAI ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#a78bfa", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", borderRadius: 4, padding: "2px 8px" }}>
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" /></svg>
+                AI Analysis
+              </span>
+            ) : (
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#555" }}>Analysis</span>
+            )}
+          </div>
+          <p style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,0.7)" }}>{aiSummary.text}</p>
+        </div>
+
+        {/* Vote */}
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "16px 20px" }}>
+          <VoteWidget
+            slug={`${driverA.driver_ref}-vs-${driverB.driver_ref}`}
+            driverARef={driverA.driver_ref}
+            driverBRef={driverB.driver_ref}
+            nameA={`${driverA.first_name} ${driverA.last_name}`}
+            nameB={`${driverB.first_name} ${driverB.last_name}`}
+            colorA={colorA}
+            colorB={colorB}
+          />
+        </div>
+      </div>
     </section>
   );
 }

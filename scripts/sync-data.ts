@@ -9,7 +9,9 @@
  *   npx tsx scripts/sync-data.ts --season=2023 — specific season
  */
 
-import "dotenv/config";
+import { config } from "dotenv";
+config({ path: ".env.local" });
+config();
 import { createScriptDB } from "../lib/db/client";
 import {
   fetchSeasons,

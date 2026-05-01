@@ -11,7 +11,9 @@
  *   npx tsx scripts/compute-comparisons.ts --top=20
  */
 
-import "dotenv/config";
+import { config } from "dotenv";
+config({ path: ".env.local" });
+config();
 import { createScriptDB } from "../lib/db/client";
 import { computeComparison } from "../lib/comparison/compute";
 import { buildComparisonSlug } from "../lib/data/types";
