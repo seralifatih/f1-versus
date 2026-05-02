@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { trackEvent } from "@/lib/analytics";
@@ -310,9 +310,12 @@ function DriverPicker({
 export function DriverSearchBar({ drivers }: { drivers: DriverOption[] }) {
   const [driverA, setDriverA] = useState<DriverOption | null>(null);
   const [driverB, setDriverB] = useState<DriverOption | null>(null);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const isMobile = useIsMobile(480);
-  const currentYear = new Date().getFullYear();
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const canCompare = driverA !== null && driverB !== null;
 
@@ -328,11 +331,27 @@ export function DriverSearchBar({ drivers }: { drivers: DriverOption[] }) {
     router.push(`/compare/${refs[0]}-vs-${refs[1]}`);
   }, [driverA, driverB, router]);
 
-  // Swap drivers
-  const handleSwap = () => {
+  const handleSwap = useCallback(() => {
     setDriverA(driverB);
     setDriverB(driverA);
-  };
+  }, [driverA, driverB]);
+
+  // Don't render the layout-dependent parts until client-side to avoid hydration mismatch
+  if (!mounted) {
+    return (
+      <div
+        style={{
+          backgroundColor: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: 16,
+          padding: 20,
+          maxWidth: 640,
+          margin: "0 auto",
+          minHeight: 120,
+        }}
+      />
+    );
+  }
 
   return (
     <div
