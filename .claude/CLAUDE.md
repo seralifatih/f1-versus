@@ -93,16 +93,29 @@ Always validate URL state. Invalid state falls back to defaults silently.
 
 ## Design System
 
-The prototype `f1-goat-v1.jsx` is the design bible. Match it pixel-by-pixel:
-- Dark theme by default (race-night atmosphere)
-- Editorial display font: **Fraunces** (variable, serif, sharp opticals)
-- Body / numeric font: **JetBrains Mono** for ranks/scores, **Inter Tight** for prose (yes Inter for body is fine here because the display font carries character)
-- Accent: signal red `#ef3340` (F1 race red without being a brand violation)
-- Background: deep ink `#0a0a0b`, raised panels `#141416`
-- Animation: row reorder uses `Motion` library (FLIP technique). Stagger 30ms per row.
-- Numbers are LARGE. Ranks are huge. Scores are bold.
+Direction: **FIA technical document × race telemetry**. The old editorial-magazine
+direction (and `prototype/f1-goat-v1.jsx`) is OBSOLETE — do not reference it.
 
-Do not use shadcn/ui pre-styled. Build custom. The product *looks* like a magazine power-ranking, not like a SaaS dashboard.
+- Dark theme by default (track-at-night). Light theme is technical-document-on-white.
+- Display font: **Archivo** at 700–900 with `letter-spacing: -0.04em` — geometric,
+  wide, motorsport-plate vibe.
+- Body font: **Inter**. Mono font: **JetBrains Mono** for all numerics, ranks,
+  scores, codes, timing values.
+- Accent: curb red `#e6112d` (dark) / `#c91126` (light). Functional sector colors
+  (`sector-purple` = best, `sector-green` = personal best, `sector-yellow` = mid,
+  `sector-red` = loser). No purely decorative color.
+- Surfaces: `#0c0c0d` bg, `#131316` panel, `#1a1a1e` panel-2, `#1e1e22` panel-raised.
+- Heavy borders (`border-strong`, `border-bright`) over soft spacing gaps.
+- Full-bleed layout via `components/layout/Frame.tsx` with 60px gutters that
+  collapse on mobile. Major sections separated by full-width hairline dividers.
+- Reusable type rhythm classes: `.t-display`, `.t-headline`, `.t-label`,
+  `.t-value`, `.t-rank`, `.t-body`, `.t-body-muted`.
+- Atoms in `components/atoms/`: `SectionMarker` (`§ 01.A — LABEL`),
+  `RaceNumberBox` (driver number plate), `SectorBar` (timing-screen bar).
+- Animation: row reorder still uses `Motion` (FLIP), 30ms stagger.
+
+Do not use shadcn/ui pre-styled. Build custom. The product *looks* like an FIA
+regulation document crossed with a race-control timing screen, not a SaaS dashboard.
 
 ## File Structure (target)
 

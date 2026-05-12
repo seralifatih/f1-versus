@@ -5,12 +5,15 @@ import { ArrowLeft, ArrowLeftRight, ArrowRight, HelpCircle } from 'lucide-react'
 import { getAllDriverStats, getDriverById } from '@/lib/f1db/client'
 import type { DriverStats, EraId } from '@/lib/f1db/types'
 import { flagOf } from '@/lib/flags'
+import { initialsFor, raceNumberFor } from '@/lib/driver-numbers'
 import { rank, score } from '@/lib/scoring/engine'
 import { METRIC_KEYS, METRIC_LABELS, METRIC_TOOLTIPS } from '@/lib/scoring/constants'
 import type { ScoredDriver } from '@/lib/scoring/types'
 import { decodeFormula } from '@/lib/url-state/decode'
 import { encodeFormula } from '@/lib/url-state/encode'
 import { ogImageUrl, toUrlSearchParams, type NextSearchParams } from '@/lib/url-state/next'
+import { RaceNumberBox } from '@/components/atoms/RaceNumberBox'
+import { SectionMarker } from '@/components/atoms/SectionMarker'
 
 type Params = Promise<{ driverId: string }>
 
@@ -56,8 +59,6 @@ export default async function DriverPage({
   const sp = toUrlSearchParams(await searchParams)
   const { formula, era } = decodeFormula(sp)
 
-  // Parallel fetch: driver in 'all' era + per-era variants for the comparison
-  // table + the full all-era list for rank position and neighbors.
   const [driver, allDrivers, goldenSelf, turboSelf, modernSelf] = await Promise.all([
     getDriverById(driverId, 'all'),
     getAllDriverStats('all'),
@@ -73,8 +74,6 @@ export default async function DriverPage({
   const rankIndex = ranked.findIndex((d) => d.driverId === driverId)
   const rankPosition = rankIndex >= 0 ? rankIndex + 1 : null
 
-  // Era comparison: only show eras the driver actually appears in. If only
-  // one era is non-null, the whole block is suppressed.
   const eraEntries = (
     [
       ['golden', goldenSelf],
@@ -85,20 +84,20 @@ export default async function DriverPage({
 
   const neighbors = pickNeighbors(ranked, rankIndex)
 
-  // Encoded params for "back to ranking" and other CTAs.
   const formulaParams = encodeFormula(formula, era).toString()
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-10">
       <Link
         href={{ pathname: '/', search: formulaParams }}
-        className="inline-flex items-center gap-1.5 text-xs text-muted2 hover:text-current transition-colors"
+        className="inline-flex items-center gap-1.5 font-mono uppercase text-[10px] tracking-[0.12em] text-muted-2 hover:text-curb-red transition-colors"
       >
-        <ArrowLeft size={13} />
+        <ArrowLeft size={11} />
         Back to ranking
       </Link>
 
       <Hero
+        driverId={driverId}
         name={driver.name}
         countryCode={driver.countryCode}
         firstYear={driver.firstYear}
@@ -112,12 +111,14 @@ export default async function DriverPage({
 
       {eraEntries.length > 1 && (
         <EraComparison
+          currentEra={era}
           entries={eraEntries.map(([id, d]) => ({
             id,
             label: ERA_LABEL[id],
             score: score(d.metrics, formula.weights),
             firstYear: d.firstYear,
             lastYear: d.lastYear,
+            href: `/?${encodeFormula(formula, id).toString()}`,
           }))}
         />
       )}
@@ -130,12 +131,12 @@ export default async function DriverPage({
         />
       )}
 
-      <div className="pt-4 border-t border-border">
+      <div className="pt-4 border-t border-border-strong">
         <Link
           href={{ pathname: '/', search: formulaParams }}
-          className="inline-flex items-center gap-1.5 text-xs text-muted2 hover:text-current transition-colors"
+          className="inline-flex items-center gap-1.5 font-mono uppercase text-[10px] tracking-[0.12em] text-muted-2 hover:text-curb-red transition-colors"
         >
-          <ArrowLeft size={13} />
+          <ArrowLeft size={11} />
           See full ranking
         </Link>
       </div>
@@ -148,6 +149,7 @@ export default async function DriverPage({
 // ────────────────────────────────────────────────────────────────────────────
 
 function Hero({
+  driverId,
   name,
   countryCode,
   firstYear,
@@ -156,6 +158,7 @@ function Hero({
   rankPosition,
   formulaLabel,
 }: {
+  driverId: string
   name: string
   countryCode: string | null
   firstYear: number
@@ -164,103 +167,190 @@ function Hero({
   rankPosition: number | null
   formulaLabel: string
 }) {
+  const number = raceNumberFor(driverId)
   return (
-    <section className="grid gap-6 sm:grid-cols-[1fr_auto] items-end">
-      <div>
-        <div className="flex items-center gap-4 mb-2">
-          <span className="text-4xl sm:text-5xl">{flagOf(countryCode)}</span>
-          <h1
-            className="font-display font-normal tracking-[-0.03em] font-vary-[opsz_144,wght_400] leading-[1] m-0"
-            style={{ fontSize: 'clamp(40px, 6vw, 64px)' }}
-          >
-            {name}
-          </h1>
-        </div>
-        <div className="text-sm text-muted font-mono ml-[calc(2.25rem+1rem)] sm:ml-[calc(3rem+1rem)]">
-          {firstYear}–{lastYear}
-        </div>
+    <section>
+      <div className="flex items-baseline justify-between mb-3">
+        <SectionMarker code="00" label="Driver Profile" />
+        <span className="font-mono uppercase text-[10px] tracking-[0.12em] text-muted-2">
+          ID: {driverId}
+        </span>
       </div>
-      <div className="text-right">
-        <div className="font-mono text-[28px] font-bold tracking-[-0.02em] leading-none">
-          {score.toFixed(1)}
-        </div>
-        <div className="text-[11px] text-muted2 uppercase tracking-[0.12em] mt-2">
-          {rankPosition !== null ? (
-            <>
-              Ranked <span className="text-red font-bold">#{rankPosition}</span> under{' '}
-              {formulaLabel}
-            </>
-          ) : (
-            <>Unranked under {formulaLabel}</>
-          )}
+      <div className="border border-border-strong bg-panel p-5 md:p-6">
+        <div className="grid gap-6 md:grid-cols-[auto_1fr_auto] md:items-start">
+          <div className="shrink-0">
+            <RaceNumberBox
+              number={number}
+              initials={number ? null : initialsFor(name)}
+              accent="sector-purple"
+            />
+          </div>
+          <div className="min-w-0">
+            <h1
+              className="font-display font-extrabold uppercase tracking-[-0.04em] leading-[0.95] m-0"
+              style={{ fontSize: 'clamp(36px, 6vw, 64px)' }}
+            >
+              {name}
+            </h1>
+            <div className="mt-3 font-mono uppercase text-[11px] tracking-[0.12em] text-muted flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span aria-hidden="true" className="text-base">{flagOf(countryCode)}</span>
+              <span>{countryCode ?? '—'}</span>
+              <span>·</span>
+              <span>
+                {firstYear}–{lastYear}
+              </span>
+            </div>
+          </div>
+          <div className="text-right md:text-right">
+            <div className="t-label">Rank</div>
+            <div
+              className="t-rank text-text mt-1"
+              style={{ fontSize: 'clamp(32px, 5vw, 48px)' }}
+            >
+              {rankPosition !== null ? String(rankPosition).padStart(2, '0') : '—'}
+            </div>
+            <div className="t-label mt-2">Under {formulaLabel}</div>
+            <div
+              className="t-value text-sector-purple mt-3"
+              style={{ fontSize: 'clamp(36px, 5vw, 56px)' }}
+            >
+              {score.toFixed(1)}
+            </div>
+            <div className="t-label mt-1">Score</div>
+          </div>
         </div>
       </div>
     </section>
   )
 }
 
+function metricColor(value: number): string {
+  if (value >= 80) return 'bg-sector-purple'
+  if (value >= 50) return 'bg-sector-green'
+  if (value >= 20) return 'bg-muted-2'
+  return 'bg-border-strong'
+}
+
+function metricValueColor(value: number): string {
+  if (value >= 80) return 'text-sector-purple'
+  if (value >= 50) return 'text-sector-green'
+  if (value >= 20) return 'text-text'
+  return 'text-muted'
+}
+
 function MetricBreakdown({ driver }: { driver: DriverStats }) {
   return (
-    <section className="border border-border rounded-xl bg-panel">
-      <div className="px-5 py-3 border-b border-border text-[11px] text-muted uppercase tracking-[0.12em]">
-        Metric breakdown
-      </div>
-      <div className="divide-y divide-row-divider">
-        {METRIC_KEYS.map((key) => {
-          const value = driver.metrics[key]
-          const pct = Math.max(0, Math.min(100, value))
-          return (
-            <div
-              key={key}
-              className="grid items-center gap-4 px-5 py-3 [grid-template-columns:1fr_2fr_auto]"
-            >
-              <div className="flex items-center gap-1.5 text-[13px]">
-                <span>{METRIC_LABELS[key]}</span>
-                <span title={METRIC_TOOLTIPS[key]} className="text-muted hover:text-current">
-                  <HelpCircle size={12} />
-                </span>
-              </div>
-              <div className="h-1.5 bg-border rounded-full overflow-hidden">
-                <div className="h-full bg-red rounded-full" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="font-mono text-sm tabular-nums w-12 text-right">
-                {value.toFixed(1)}
-              </div>
-            </div>
-          )
-        })}
+    <section>
+      <SectionMarker code="01" label="Metric Breakdown" className="mb-3" />
+      <div className="border border-border-strong bg-panel">
+        <table className="w-full border-collapse">
+          <tbody>
+            {METRIC_KEYS.map((key) => {
+              const value = driver.metrics[key]
+              const pct = Math.max(0, Math.min(100, value))
+              return (
+                <tr key={key} className="border-b border-border last:border-b-0">
+                  <th
+                    scope="row"
+                    className="font-mono uppercase text-[11px] tracking-[0.1em] text-muted text-left px-4 py-2.5 whitespace-nowrap w-[180px]"
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      {METRIC_LABELS[key]}
+                      <span
+                        title={METRIC_TOOLTIPS[key]}
+                        aria-label={METRIC_TOOLTIPS[key]}
+                        className="text-muted-2 hover:text-text cursor-help"
+                      >
+                        <HelpCircle size={11} />
+                      </span>
+                    </span>
+                  </th>
+                  <td className="px-4 py-2.5">
+                    <div className="h-2 bg-border overflow-hidden" aria-hidden="true">
+                      <div
+                        className={`h-full ${metricColor(value)}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </td>
+                  <td
+                    className={`t-value text-right tabular w-16 px-4 py-2.5 ${metricValueColor(value)}`}
+                  >
+                    {value.toFixed(1)}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </section>
   )
 }
 
 function EraComparison({
+  currentEra,
   entries,
 }: {
-  entries: Array<{ id: EraId; label: string; score: number; firstYear: number; lastYear: number }>
+  currentEra: EraId
+  entries: Array<{
+    id: EraId
+    label: string
+    score: number
+    firstYear: number
+    lastYear: number
+    href: string
+  }>
 }) {
   return (
     <section>
-      <div className="text-[11px] text-muted uppercase tracking-[0.12em] mb-2.5">
-        Era comparison
-      </div>
-      <div className="border border-border rounded-xl bg-panel divide-y divide-row-divider">
-        {entries.map((e) => (
-          <div
-            key={e.id}
-            className="grid items-center gap-4 px-5 py-3 [grid-template-columns:1fr_auto_auto]"
-          >
-            <div className="font-display text-[18px] font-medium tracking-[-0.01em] font-vary-[opsz_36]">
-              {e.label}
+      <SectionMarker code="02" label="Era Comparison" className="mb-3" />
+      <div className="border-y border-border-strong divide-y divide-border bg-panel">
+        {entries.map((e) => {
+          const isActive = e.id === currentEra
+          const inner = (
+            <>
+              <div>
+                <div className="font-display font-bold uppercase text-[16px] tracking-[-0.02em]">
+                  {e.label}
+                  {isActive && (
+                    <span className="ml-2 t-label text-curb-red align-middle">current</span>
+                  )}
+                </div>
+                <div className="mt-1 font-mono uppercase text-[10px] tracking-[0.12em] text-muted-2">
+                  {e.firstYear}–{e.lastYear}
+                </div>
+              </div>
+              <div
+                className={`t-value tabular text-[20px] ${
+                  isActive ? 'text-sector-purple' : 'text-text'
+                }`}
+              >
+                {e.score.toFixed(1)}
+              </div>
+            </>
+          )
+          return isActive ? (
+            <div
+              key={e.id}
+              className="grid items-center gap-4 px-5 py-3 bg-panel-raised [grid-template-columns:1fr_auto] relative"
+            >
+              <span
+                aria-hidden="true"
+                className="absolute left-0 top-0 bottom-0 w-[2px] bg-curb-red"
+              />
+              {inner}
             </div>
-            <div className="text-xs text-muted font-mono">
-              {e.firstYear}–{e.lastYear}
-            </div>
-            <div className="font-mono text-[20px] font-bold tabular-nums">
-              {e.score.toFixed(1)}
-            </div>
-          </div>
-        ))}
+          ) : (
+            <Link
+              key={e.id}
+              href={e.href}
+              className="grid items-center gap-4 px-5 py-3 hover:bg-panel-2 transition-colors [grid-template-columns:1fr_auto]"
+            >
+              {inner}
+            </Link>
+          )
+        })}
       </div>
     </section>
   )
@@ -277,10 +367,8 @@ function RelatedComparisons({
 }) {
   return (
     <section>
-      <div className="text-[11px] text-muted uppercase tracking-[0.12em] mb-2.5">
-        Compare with&hellip;
-      </div>
-      <div className="border border-border rounded-xl bg-panel divide-y divide-row-divider">
+      <SectionMarker code="03" label="Compare With…" className="mb-3" />
+      <div className="border-y border-border-strong divide-y divide-border bg-panel">
         {neighbors.map((n) => (
           <Link
             key={n.d.driverId}
@@ -288,24 +376,26 @@ function RelatedComparisons({
               pathname: `/vs/${driverId}/${n.d.driverId}`,
               search: formulaParams,
             }}
-            className="grid items-center gap-3 px-5 py-3 hover:bg-[rgba(239,51,64,0.04)] transition-colors [grid-template-columns:24px_1fr_auto_auto_auto]"
+            className="grid items-center gap-3 px-5 py-3 hover:bg-panel-2 transition-colors [grid-template-columns:36px_1fr_auto_auto_auto]"
           >
-            <span className="text-[11px] text-muted font-mono">#{n.rank}</span>
+            <span className="font-mono uppercase text-[10px] tracking-[0.12em] text-muted-2">
+              #{n.rank}
+            </span>
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-lg shrink-0">{flagOf(n.d.countryCode)}</span>
-              <span className="font-display text-[17px] font-medium tracking-[-0.01em] font-vary-[opsz_36] truncate">
+              <span className="text-lg shrink-0" aria-hidden="true">{flagOf(n.d.countryCode)}</span>
+              <span className="font-display font-bold uppercase text-[16px] tracking-[-0.02em] truncate">
                 {n.d.name}
               </span>
             </div>
-            <span className="font-mono text-sm tabular-nums">
+            <span className="t-value text-text text-[14px] tabular">
               {n.d.score.toFixed(1)}
             </span>
-            <span className="text-[10px] text-muted2 uppercase tracking-[0.1em]">
+            <span className="t-label">
               {n.relation === 'above' ? 'above' : 'below'}
             </span>
-            <span className="text-muted2 group-hover:text-red flex items-center gap-1">
-              <ArrowLeftRight size={13} />
-              <ArrowRight size={13} />
+            <span className="text-muted-2 flex items-center gap-1">
+              <ArrowLeftRight size={12} />
+              <ArrowRight size={12} />
             </span>
           </Link>
         ))}

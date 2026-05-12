@@ -1,8 +1,12 @@
 /**
- * Pre-fetches Fraunces 400 + 700 woff2 files into public/fonts/ so the OG
- * image route can read them via the ASSETS binding instead of hitting
- * Google Fonts at request time. Cloudflare egress sometimes can't extract
- * the woff2 URL from the CSS endpoint — bundling it sidesteps that.
+ * Pre-fetches Archivo 400 + 800 woff (not woff2) files into public/fonts/
+ * so the OG image route can read them via the ASSETS binding at runtime.
+ *
+ * @vercel/og / satori does not accept woff2. We ask Google Fonts for woff
+ * by sending an older browser UA (IE 11) — Google's response then ships
+ * legacy woff inside @font-face. The URL Google hands back has no
+ * extension (it's a /l/font?kit=... handler), so we save the bytes with
+ * a .woff suffix locally for clarity.
  *
  * Idempotent. Run automatically before deploy via the `predeploy` script.
  */
@@ -11,22 +15,23 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const OUT_DIR = join(process.cwd(), 'public', 'fonts')
-const WEIGHTS: Array<400 | 700> = [400, 700]
+const WEIGHTS: Array<400 | 800> = [400, 800]
 
-async function fetchWoff2(weight: 400 | 700): Promise<ArrayBuffer> {
+// IE 11 UA — too old for woff2, so Google serves legacy woff inside the
+// @font-face declaration.
+const LEGACY_UA =
+  'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko'
+
+async function fetchWoff(weight: 400 | 800): Promise<ArrayBuffer> {
   const css = await fetch(
-    `https://fonts.googleapis.com/css2?family=Fraunces:wght@${weight}&display=swap`,
-    {
-      headers: {
-        // Real browser UA so Google returns the woff2 variant, not TTF.
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      },
-    },
+    `https://fonts.googleapis.com/css2?family=Archivo:wght@${weight}&display=swap`,
+    { headers: { 'User-Agent': LEGACY_UA } },
   ).then((r) => r.text())
-  const match = css.match(/url\((https:\/\/[^)]+\.woff2)\)/)
+  // Match the woff URL specifically. The handler URL has no .woff suffix —
+  // we identify it by the format('woff') hint immediately after.
+  const match = css.match(/url\((https:\/\/[^)]+)\)\s+format\('woff'\)/)
   if (!match || !match[1]) {
-    throw new Error(`Could not find Fraunces ${weight} woff2 URL in CSS response`)
+    throw new Error(`Could not find Archivo ${weight} woff URL in CSS response`)
   }
   return fetch(match[1]).then((r) => r.arrayBuffer())
 }
@@ -34,13 +39,13 @@ async function fetchWoff2(weight: 400 | 700): Promise<ArrayBuffer> {
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true })
   for (const w of WEIGHTS) {
-    const out = join(OUT_DIR, `fraunces-${w}.woff2`)
+    const out = join(OUT_DIR, `archivo-${w}.woff`)
     if (existsSync(out)) {
       console.log(`✓ ${out} (cached)`)
       continue
     }
-    console.log(`→ Fetching Fraunces ${w}…`)
-    const bytes = await fetchWoff2(w)
+    console.log(`→ Fetching Archivo ${w}…`)
+    const bytes = await fetchWoff(w)
     writeFileSync(out, Buffer.from(bytes))
     console.log(`  wrote ${bytes.byteLength} bytes`)
   }

@@ -4,24 +4,35 @@ import { getAllDriverStats, getDriversByIds } from '@/lib/f1db/client'
 import { rank, score } from '@/lib/scoring/engine'
 import { decodeFormula } from '@/lib/url-state/decode'
 import { isEraId, type EraId } from '@/lib/f1db/types'
-import { METRIC_LABELS, METRIC_KEYS } from '@/lib/scoring/constants'
 import type { DriverStats } from '@/lib/f1db/types'
 import { flagOf } from '@/lib/flags'
+import { initialsFor, raceNumberFor } from '@/lib/driver-numbers'
+import { BUILD_DATA_VERSION, BUILD_DATA_SYNC, APP_VERSION } from '@/lib/build-info'
 
-// Note: not setting runtime='edge' here. OpenNext for Cloudflare routes all
-// pages and handlers through the standard Worker pipeline where the D1
-// binding (`env.DB`) resolves cleanly. Forcing edge runtime trips up the
-// dev fallback in lib/f1db/client.ts because edge runtime has no Node
-// `require`. The image still renders in well under the request budget.
-//
-// Theme: OG images are intentionally always rendered in the dark palette.
-// They're server-generated and cached aggressively; we have no signal for
-// the viewer's theme preference. Dark is the brand's primary identity and
-// the most legible at thumbnail size in social feeds.
+// OG images are intentionally always rendered in the dark palette — they
+// are server-cached and we have no signal for the viewer's theme.
 export const dynamic = 'force-dynamic'
 
 const WIDTH = 1200
 const HEIGHT = 630
+
+// New palette values, inlined as @vercel/og does NOT see CSS vars.
+const C = {
+  bg: '#0c0c0d',
+  panel: '#131316',
+  panelRaised: '#1e1e22',
+  border: '#26262c',
+  borderStrong: '#3a3a42',
+  text: '#ececed',
+  muted: '#9a9aa3',
+  muted2: '#6a6a72',
+  dim: '#45454c',
+  sectorPurple: '#b026ff',
+  sectorGreen: '#00d563',
+  sectorYellow: '#ffcc00',
+  curbRed: '#e6112d',
+  curbWhite: '#ffffff',
+} as const
 
 const CACHE_HEADERS = {
   'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
@@ -34,19 +45,16 @@ const ERA_LABEL: Record<EraId, string> = {
   modern: 'Modern · 2006–now',
 }
 
-// Fraunces is bundled at build time by scripts/fetch-og-fonts.ts and lives
+// Archivo is bundled at build time by scripts/fetch-og-fonts.ts and lives
 // under public/fonts/. Worker reads it via the ASSETS binding rather than
 // fetching Google Fonts at request time — Cloudflare egress sometimes
 // can't parse Google's CSS response, which 500s the OG route.
 const fontCache = new Map<number, ArrayBuffer>()
-async function loadFraunces(weight: 400 | 700, reqUrl: string): Promise<ArrayBuffer> {
+async function loadArchivo(weight: 400 | 800, reqUrl: string): Promise<ArrayBuffer> {
   const cached = fontCache.get(weight)
   if (cached) return cached
-  // ASSETS binding serves files relative to the site origin. Build an
-  // absolute URL off the request so this works both in `wrangler dev`
-  // and in production.
   const u = new URL(reqUrl)
-  u.pathname = `/fonts/fraunces-${weight}.woff2`
+  u.pathname = `/fonts/archivo-${weight}.woff`
   u.search = ''
   const res = await fetch(u.toString())
   if (!res.ok) throw new Error(`Font fetch failed: ${res.status} ${u.pathname}`)
@@ -61,9 +69,8 @@ export async function GET(req: Request): Promise<Response> {
 
   try {
     if (type === 'battle') return await renderBattle(url.searchParams, req.url)
-    // type === 'driver' falls through to the ranking image for now. The
-    // driver detail OG is a follow-up; serving the ranking image keeps
-    // social previews valid until the dedicated layout ships.
+    // type === 'driver' falls through to ranking until a dedicated driver
+    // OG ships — keeps social previews valid.
     return await renderRanking(url.searchParams, req.url)
   } catch (err) {
     console.error('OG render failed', err)
@@ -80,38 +87,59 @@ async function renderRanking(params: URLSearchParams, reqUrl: string): Promise<R
   const drivers = await getAllDriverStats(era)
   const ranked = rank(drivers, formula.weights).slice(0, 10)
 
-  const [fraunceReg, fraunceBold] = await Promise.all([
-    loadFraunces(400, reqUrl),
-    loadFraunces(700, reqUrl),
+  const [archivoReg, archivoBlack] = await Promise.all([
+    loadArchivo(400, reqUrl),
+    loadArchivo(800, reqUrl),
   ])
 
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          background: '#0a0a0b',
-          color: '#e8e8e8',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '48px 56px',
-          fontFamily: 'Fraunces',
-        }}
-      >
-        <Header eraLabel={ERA_LABEL[era]} formulaLabel={formula.label} />
-        <div style={{ display: 'flex', flexDirection: 'column', marginTop: 28, flex: 1 }}>
+      <div style={shell()}>
+        <TopStrip />
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '20px 48px 12px' }}>
+          <div style={{ fontSize: 18, color: C.muted2, letterSpacing: '0.15em' }}>
+            § 01 — TOP 10
+          </div>
+          <div
+            style={{
+              fontSize: 64,
+              fontWeight: 900,
+              textTransform: 'uppercase',
+              letterSpacing: '-0.045em',
+              lineHeight: 1,
+              marginTop: 6,
+              color: C.text,
+            }}
+          >
+            {formula.label}
+          </div>
+          <div style={{ fontSize: 16, color: C.muted, marginTop: 6, letterSpacing: '0.05em' }}>
+            {ERA_LABEL[era]}
+          </div>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            borderTop: `1px solid ${C.borderStrong}`,
+            borderBottom: `1px solid ${C.borderStrong}`,
+            margin: '0 48px',
+            background: C.panel,
+          }}
+        >
           {ranked.map((d, idx) => (
             <RankingRow
               key={d.driverId}
               rank={idx + 1}
+              driverId={d.driverId}
               name={d.name}
               countryCode={d.countryCode}
               score={d.score}
             />
           ))}
         </div>
-        <Footer />
+        <BottomStrip />
       </div>
     ),
     {
@@ -119,8 +147,8 @@ async function renderRanking(params: URLSearchParams, reqUrl: string): Promise<R
       height: HEIGHT,
       headers: CACHE_HEADERS,
       fonts: [
-        { name: 'Fraunces', data: fraunceReg, weight: 400, style: 'normal' },
-        { name: 'Fraunces', data: fraunceBold, weight: 700, style: 'normal' },
+        { name: 'Archivo', data: archivoReg, weight: 400, style: 'normal' },
+        { name: 'Archivo', data: archivoBlack, weight: 800, style: 'normal' },
       ],
     },
   )
@@ -146,49 +174,68 @@ async function renderBattle(params: URLSearchParams, reqUrl: string): Promise<Re
 
   const scoreA = score(da.metrics, formula.weights)
   const scoreB = score(db.metrics, formula.weights)
-  const [fraunceReg, fraunceBold] = await Promise.all([
-    loadFraunces(400, reqUrl),
-    loadFraunces(700, reqUrl),
+  const [archivoReg, archivoBlack] = await Promise.all([
+    loadArchivo(400, reqUrl),
+    loadArchivo(800, reqUrl),
   ])
 
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          background: '#0a0a0b',
-          color: '#e8e8e8',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '48px 56px',
-          fontFamily: 'Fraunces',
-        }}
-      >
-        <Header eraLabel={ERA_LABEL[era]} formulaLabel={formula.label} />
-        <div style={{ display: 'flex', flex: 1, marginTop: 28, gap: 24 }}>
-          <DriverCard driver={da} score={scoreA} winning={scoreA > scoreB} />
-          <DriverCard driver={db} score={scoreB} winning={scoreB > scoreA} />
+      <div style={shell()}>
+        <TopStrip />
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '20px 48px 12px' }}>
+          <div style={{ fontSize: 18, color: C.muted2, letterSpacing: '0.15em' }}>
+            § A — HEAD-TO-HEAD
+          </div>
+          <div
+            style={{
+              fontSize: 24,
+              color: C.muted,
+              marginTop: 6,
+              letterSpacing: '0.05em',
+            }}
+          >
+            {formula.label} · {ERA_LABEL[era]}
+          </div>
         </div>
         <div
           style={{
             display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            marginTop: 20,
-            marginBottom: 12,
+            flex: 1,
+            margin: '0 48px',
+            borderTop: `1px solid ${C.borderStrong}`,
+            borderBottom: `1px solid ${C.borderStrong}`,
+            background: C.panel,
           }}
         >
-          {METRIC_KEYS.slice(0, 5).map((key) => (
-            <BattleBar
-              key={key}
-              label={METRIC_LABELS[key]}
-              valueA={da.metrics[key]}
-              valueB={db.metrics[key]}
-            />
-          ))}
+          <BattleColumn driver={da} score={scoreA} winning={scoreA > scoreB} align="left" />
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '0 16px',
+              borderLeft: `1px solid ${C.borderStrong}`,
+              borderRight: `1px solid ${C.borderStrong}`,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 96,
+                fontWeight: 800,
+                color: C.sectorPurple,
+                letterSpacing: '-0.05em',
+                textTransform: 'uppercase',
+                lineHeight: 1,
+              }}
+            >
+              VS
+            </div>
+          </div>
+          <BattleColumn driver={db} score={scoreB} winning={scoreB > scoreA} align="right" />
         </div>
-        <Footer />
+        <BottomStrip />
       </div>
     ),
     {
@@ -196,8 +243,8 @@ async function renderBattle(params: URLSearchParams, reqUrl: string): Promise<Re
       height: HEIGHT,
       headers: CACHE_HEADERS,
       fonts: [
-        { name: 'Fraunces', data: fraunceReg, weight: 400, style: 'normal' },
-        { name: 'Fraunces', data: fraunceBold, weight: 700, style: 'normal' },
+        { name: 'Archivo', data: archivoReg, weight: 400, style: 'normal' },
+        { name: 'Archivo', data: archivoBlack, weight: 800, style: 'normal' },
       ],
     },
   )
@@ -207,198 +254,286 @@ async function renderBattle(params: URLSearchParams, reqUrl: string): Promise<Re
 // Shared pieces
 // ────────────────────────────────────────────────────────────────────────────
 
-function Header({ eraLabel, formulaLabel }: { eraLabel: string; formulaLabel: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 18 }}>
-        <div
-          style={{
-            display: 'flex',
-            fontSize: 48,
-            fontWeight: 700,
-            letterSpacing: '-0.03em',
-          }}
-        >
-          <span>f1</span>
-          <span style={{ color: '#ef3340' }}>·</span>
-          <span>versus</span>
-        </div>
-        <div
-          style={{
-            fontSize: 16,
-            color: '#888',
-            letterSpacing: '0.15em',
-            textTransform: 'uppercase',
-          }}
-        >
-          GOAT Calculator
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-        <div style={{ fontSize: 28, color: '#ef3340', fontWeight: 700 }}>{formulaLabel}</div>
-        <div style={{ fontSize: 14, color: '#888' }}>{eraLabel}</div>
-      </div>
-    </div>
-  )
+function shell(): React.CSSProperties {
+  return {
+    width: '100%',
+    height: '100%',
+    background: C.bg,
+    color: C.text,
+    display: 'flex',
+    flexDirection: 'column',
+    fontFamily: 'Archivo',
+  }
 }
 
-function Footer() {
+function TopStrip() {
   return (
     <div
       style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        fontSize: 14,
-        color: '#666',
-        borderTop: '1px solid #1f1f22',
-        paddingTop: 16,
+        padding: '14px 48px',
+        borderTop: `1px solid ${C.borderStrong}`,
+        borderBottom: `1px solid ${C.borderStrong}`,
+        background: C.panel,
+        height: 60,
       }}
     >
-      <span>Data: F1DB · Unofficial</span>
-      <span>f1-versus.com</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <span
+          style={{
+            display: 'flex',
+            fontSize: 28,
+            fontWeight: 800,
+            letterSpacing: '-0.02em',
+            textTransform: 'uppercase',
+          }}
+        >
+          <span>f1</span>
+          <span style={{ color: C.curbRed }}>·</span>
+          <span>versus</span>
+        </span>
+        <span
+          style={{
+            borderLeft: `1px solid ${C.borderStrong}`,
+            height: 22,
+          }}
+        />
+        <span
+          style={{
+            fontSize: 14,
+            color: C.muted2,
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase',
+          }}
+        >
+          GOAT Calculator
+        </span>
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 18,
+          fontSize: 12,
+          color: C.muted2,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+        }}
+      >
+        <span>{BUILD_DATA_VERSION}</span>
+        <span>SYNC {BUILD_DATA_SYNC}</span>
+        <span style={{ color: C.curbRed }}>{APP_VERSION}</span>
+      </div>
+    </div>
+  )
+}
+
+function BottomStrip() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '14px 48px',
+        borderTop: `1px solid ${C.borderStrong}`,
+        background: C.panel,
+        fontSize: 14,
+        letterSpacing: '0.15em',
+        textTransform: 'uppercase',
+      }}
+    >
+      <span style={{ color: C.curbRed, fontWeight: 800 }}>
+        MOVE THE SLIDERS YOURSELF →
+      </span>
+      <span style={{ color: C.muted2 }}>f1-versus.com</span>
     </div>
   )
 }
 
 function RankingRow({
   rank,
+  driverId,
   name,
   countryCode,
   score,
 }: {
   rank: number
+  driverId: string
   name: string
   countryCode: string | null
   score: number
 }) {
-  const isFirst = rank === 1
   const isTop3 = rank <= 3
+  const number = raceNumberFor(driverId)
+  const numberBg = isTop3 ? C.sectorPurple : rank <= 10 ? C.curbRed : C.panelRaised
+  const scoreColor = isTop3 ? C.sectorPurple : C.text
+  const rankColor = isTop3 ? C.sectorPurple : rank <= 10 ? C.text : C.muted
   return (
     <div
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 20,
-        padding: '6px 8px',
-        borderBottom: '1px solid #161618',
-        background: isFirst ? 'linear-gradient(90deg, rgba(239,51,64,0.08), transparent 40%)' : '',
+        gap: 18,
+        padding: '6px 18px',
+        borderBottom: `1px solid ${C.border}`,
       }}
     >
       <div
         style={{
-          width: 64,
-          fontSize: isFirst ? 40 : 30,
-          fontWeight: 700,
-          color: isFirst ? '#ef3340' : isTop3 ? '#fff' : '#555',
-          letterSpacing: '-0.04em',
+          width: 56,
+          fontSize: 36,
+          fontWeight: 800,
+          color: rankColor,
+          letterSpacing: '-0.06em',
+          textAlign: 'right',
         }}
       >
         {String(rank).padStart(2, '0')}
       </div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 36,
+          height: 32,
+          background: numberBg,
+          border: `1px solid ${C.borderStrong}`,
+          color: C.curbWhite,
+          fontSize: 14,
+          fontWeight: 800,
+        }}
+      >
+        {number ?? initialsFor(name)}
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
         <span style={{ fontSize: 24 }}>{flagOf(countryCode)}</span>
-        <span style={{ fontSize: 26, fontWeight: 400, letterSpacing: '-0.01em' }}>{name}</span>
+        <span
+          style={{
+            fontSize: 24,
+            fontWeight: 800,
+            textTransform: 'uppercase',
+            letterSpacing: '-0.03em',
+          }}
+        >
+          {name}
+        </span>
       </div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: '#fff' }}>{score.toFixed(1)}</div>
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 800,
+          color: scoreColor,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {score.toFixed(1)}
+      </div>
     </div>
   )
 }
 
-function DriverCard({
+function BattleColumn({
   driver,
   score,
   winning,
+  align,
 }: {
   driver: DriverStats
   score: number
   winning: boolean
+  align: 'left' | 'right'
 }) {
+  const number = raceNumberFor(driver.driverId)
+  const numberBg = winning ? C.sectorPurple : C.panelRaised
+  const isRight = align === 'right'
   return (
     <div
       style={{
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        padding: 24,
-        borderRadius: 16,
-        border: winning ? '2px solid #ef3340' : '1px solid #1f1f22',
-        background: winning
-          ? 'linear-gradient(135deg, rgba(239,51,64,0.16), rgba(239,51,64,0.02))'
-          : '#101012',
+        justifyContent: 'center',
+        padding: '28px 32px',
+        alignItems: isRight ? 'flex-end' : 'flex-start',
+        textAlign: isRight ? 'right' : 'left',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
-        <span style={{ fontSize: 40 }}>{flagOf(driver.countryCode)}</span>
-        <span style={{ fontSize: 38, fontWeight: 400, letterSpacing: '-0.02em' }}>
-          {driver.name}
-        </span>
-      </div>
-      <div style={{ fontSize: 14, color: '#888', marginBottom: 18 }}>
-        {driver.firstYear}–{driver.lastYear}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          flexDirection: isRight ? 'row-reverse' : 'row',
+        }}
+      >
+        <div
           style={{
-            fontSize: 72,
-            fontWeight: 700,
-            color: winning ? '#ef3340' : '#fff',
-            letterSpacing: '-0.03em',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 56,
+            height: 56,
+            background: numberBg,
+            border: `1px solid ${C.borderStrong}`,
+            color: C.curbWhite,
+            fontSize: 22,
+            fontWeight: 800,
           }}
         >
-          {score.toFixed(1)}
-        </span>
-        <span
-          style={{ fontSize: 12, color: '#555', textTransform: 'uppercase', letterSpacing: '0.15em' }}
-        >
-          Score
-        </span>
-      </div>
-    </div>
-  )
-}
-
-function BattleBar({
-  label,
-  valueA,
-  valueB,
-}: {
-  label: string
-  valueA: number
-  valueB: number
-}) {
-  const aHigher = valueA > valueB
-  const bHigher = valueB > valueA
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-      <div style={{ display: 'flex', flex: 1, justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 14, color: '#bbb', minWidth: 32, textAlign: 'right' }}>
-          {Math.round(valueA)}
-        </span>
-        <div style={{ display: 'flex', flex: 1, height: 8, background: '#1f1f22', borderRadius: 999, justifyContent: 'flex-end' }}>
-          <div
-            style={{
-              height: '100%',
-              width: `${Math.max(0, Math.min(100, valueA))}%`,
-              background: aHigher ? '#ef3340' : '#888',
-              borderRadius: 999,
-            }}
-          />
+          {number ?? initialsFor(driver.name)}
         </div>
+        <span style={{ fontSize: 40 }}>{flagOf(driver.countryCode)}</span>
       </div>
-      <div style={{ width: 180, textAlign: 'center', fontSize: 14, color: '#bbb' }}>{label}</div>
-      <div style={{ display: 'flex', flex: 1, alignItems: 'center', gap: 8 }}>
-        <div style={{ display: 'flex', flex: 1, height: 8, background: '#1f1f22', borderRadius: 999 }}>
-          <div
-            style={{
-              height: '100%',
-              width: `${Math.max(0, Math.min(100, valueB))}%`,
-              background: bHigher ? '#ef3340' : '#888',
-              borderRadius: 999,
-            }}
-          />
-        </div>
-        <span style={{ fontSize: 14, color: '#bbb', minWidth: 32 }}>{Math.round(valueB)}</span>
+      <div
+        style={{
+          fontSize: 44,
+          fontWeight: 800,
+          textTransform: 'uppercase',
+          letterSpacing: '-0.04em',
+          marginTop: 14,
+          lineHeight: 1,
+        }}
+      >
+        {driver.name}
+      </div>
+      <div
+        style={{
+          fontSize: 14,
+          color: C.muted2,
+          marginTop: 12,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+        }}
+      >
+        {driver.countryCode ?? '—'} · {driver.firstYear}–{driver.lastYear}
+      </div>
+      <div
+        style={{
+          fontSize: 96,
+          fontWeight: 800,
+          color: winning ? C.sectorPurple : C.muted,
+          letterSpacing: '-0.04em',
+          marginTop: 18,
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1,
+        }}
+      >
+        {score.toFixed(1)}
+      </div>
+      <div
+        style={{
+          fontSize: 12,
+          color: C.muted2,
+          letterSpacing: '0.18em',
+          textTransform: 'uppercase',
+          marginTop: 6,
+        }}
+      >
+        Score
       </div>
     </div>
   )

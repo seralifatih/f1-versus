@@ -1,66 +1,62 @@
 export default function Loading() {
   return (
-    <div className="space-y-8 animate-pulse" aria-hidden="true">
+    <div className="space-y-10 animate-pulse" aria-hidden="true">
       {/* Hero */}
-      <div className="space-y-3 mb-4">
-        <div className="h-16 w-3/4 max-w-[700px] bg-panel rounded-md" />
-        <div className="h-16 w-2/3 max-w-[600px] bg-panel rounded-md" />
-        <div className="h-5 w-1/2 max-w-[420px] bg-panel rounded-md mt-4" />
+      <div className="space-y-3 pb-8">
+        <div className="h-3 w-32 bg-panel-2" />
+        <div className="h-16 w-3/4 max-w-[700px] bg-panel" />
+        <div className="h-16 w-2/3 max-w-[600px] bg-panel" />
+        <div className="h-4 w-1/2 max-w-[420px] bg-panel mt-4" />
       </div>
 
       {/* Era chips row */}
-      <div className="space-y-2.5">
-        <div className="h-3 w-10 bg-panel rounded" />
-        <div className="flex gap-2">
+      <div className="space-y-3">
+        <div className="h-3 w-16 bg-panel-2" />
+        <div className="flex gap-px bg-border-strong">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-8 w-32 bg-panel rounded-full" />
+            <div key={i} className="h-7 w-32 bg-panel" />
           ))}
         </div>
       </div>
 
       {/* Preset grid */}
-      <div className="space-y-2.5">
-        <div className="h-3 w-16 bg-panel rounded" />
-        <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+      <div className="space-y-3">
+        <div className="h-3 w-20 bg-panel-2" />
+        <div
+          className="grid gap-px bg-border-strong"
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}
+        >
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-[72px] bg-panel rounded-[10px]" />
+            <div key={i} className="h-[148px] bg-panel" />
           ))}
         </div>
       </div>
 
-      {/* Share bar */}
-      <div className="flex justify-between items-center">
-        <div className="h-3 w-32 bg-panel rounded" />
-        <div className="h-8 w-32 bg-panel rounded-full" />
-      </div>
-
       {/* Ranking list */}
-      <section>
+      <section className="border-y border-border-strong bg-panel">
         {Array.from({ length: 20 }).map((_, idx) => (
-          <RowSkeleton key={idx} idx={idx} />
+          <RowSkeleton key={idx} />
         ))}
       </section>
     </div>
   )
 }
 
-function RowSkeleton({ idx }: { idx: number }) {
-  const big = idx === 0
+function RowSkeleton() {
   return (
     <div
-      className="grid items-center gap-5 px-5 py-[18px] border-b border-row-divider"
-      style={{ gridTemplateColumns: '64px 1fr auto auto' }}
+      className="grid items-center gap-5 px-5 py-4 border-b border-border"
+      style={{ gridTemplateColumns: '72px 44px 1fr auto 88px auto' }}
     >
-      <div
-        className="bg-panel rounded-md"
-        style={{ height: big ? 56 : 36, width: big ? 64 : 48 }}
-      />
+      <div className="h-10 w-12 bg-panel-2 ml-auto" />
+      <div className="h-8 w-8 bg-panel-2" />
       <div className="space-y-2">
-        <div className="h-5 w-48 bg-panel rounded" />
-        <div className="h-3 w-24 bg-panel rounded" />
+        <div className="h-5 w-48 bg-panel-2" />
+        <div className="h-3 w-24 bg-panel-2" />
       </div>
-      <div className="h-8 w-16 bg-panel rounded" />
-      <div className="h-8 w-8 bg-panel rounded-lg" />
+      <div className="h-7 w-16 bg-panel-2 ml-auto" />
+      <div className="h-1 w-full bg-panel-2" />
+      <div className="h-8 w-8 bg-panel-2" />
     </div>
   )
 }

@@ -11,6 +11,9 @@ import { getPreset } from '@/lib/scoring/presets'
 import type { Formula, ScoredDriver } from '@/lib/scoring/types'
 import { encodeFormula } from '@/lib/url-state/encode'
 import { flagOf } from '@/lib/flags'
+import { initialsFor, raceNumberFor } from '@/lib/driver-numbers'
+import { RaceNumberBox } from '@/components/atoms/RaceNumberBox'
+import { SectionMarker } from '@/components/atoms/SectionMarker'
 import { EraFilter } from '@/components/formula/EraFilter'
 import { PresetChips } from '@/components/formula/PresetChips'
 
@@ -27,9 +30,6 @@ export function BattleCard({ a, b, initialFormula, initialEra, related }: Props)
   const [formula, setFormula] = useState<Formula>(initialFormula)
   const [toastVisible, setToastVisible] = useState(false)
 
-  // Sync local state when the server re-renders with new props (era change
-  // triggers a real server navigation, formula change is a router.replace
-  // that re-renders the route with new searchParams).
   useEffect(() => setFormula(initialFormula), [initialFormula])
 
   const scoreA = score(a.metrics, formula.weights)
@@ -38,8 +38,6 @@ export function BattleCard({ a, b, initialFormula, initialEra, related }: Props)
   const bWins = scoreB > scoreA
 
   // Per-metric tally — three buckets so the user can see ties explicitly.
-  // Compares rounded values, matching what the bars display: a metric where
-  // one driver scored 29.4 and the other 29.0 reads as a tie to the user.
   const metricTally = useMemo(() => {
     let aCount = 0
     let bCount = 0
@@ -54,9 +52,6 @@ export function BattleCard({ a, b, initialFormula, initialEra, related }: Props)
     return { aCount, bCount, tied }
   }, [a.metrics, b.metrics])
 
-  // URL writers. Era change is a real navigation (re-fetch the era's data).
-  // Formula change is router.replace so the server re-renders this same page
-  // under new searchParams without changing routes.
   const onPreset = useCallback(
     (id: string) => {
       const next = getPreset(id)
@@ -97,68 +92,85 @@ export function BattleCard({ a, b, initialFormula, initialEra, related }: Props)
 
   return (
     <div className="space-y-12">
-      {/* 1. HEADLINE */}
-      <section className="grid items-end gap-4 sm:gap-8 [grid-template-columns:1fr_auto_1fr]">
-        <DriverColumn driver={a} score={scoreA} winning={aWins} align="left" />
-        <div className="flex items-center justify-center">
-          <span
-            className="font-display italic text-red font-vary-[opsz_144,wght_500]"
-            style={{ fontSize: 'clamp(48px, 10vw, 96px)', lineHeight: 1 }}
-          >
-            vs
-          </span>
+      {/* 1. IDENTITY STRIP */}
+      <section>
+        <div className="grid grid-cols-2 gap-px">
+          <SectionMarker code="A.LEFT" label="Driver A" className="mb-3" />
+          <SectionMarker code="A.RIGHT" label="Driver B" className="mb-3 justify-end" />
         </div>
-        <DriverColumn driver={b} score={scoreB} winning={bWins} align="right" />
+        <div className="border border-border-strong bg-panel">
+          <div className="grid items-center gap-4 p-5 [grid-template-columns:1fr_auto_1fr]">
+            <DriverIdentity
+              driver={a}
+              score={scoreA}
+              winning={aWins}
+              align="left"
+            />
+            <div className="flex items-center px-2">
+              <span className="hidden md:block flex-1 border-t border-border-strong" aria-hidden="true" />
+              <span
+                className="font-display font-black uppercase text-sector-purple tracking-[-0.04em] mx-3"
+                style={{ fontSize: 'clamp(32px, 5vw, 56px)', lineHeight: 1 }}
+              >
+                VS
+              </span>
+              <span className="hidden md:block flex-1 border-t border-border-strong" aria-hidden="true" />
+            </div>
+            <DriverIdentity
+              driver={b}
+              score={scoreB}
+              winning={bWins}
+              align="right"
+            />
+          </div>
+        </div>
       </section>
 
       {/* 2. METRIC BREAKDOWN */}
       <section>
-        <div className="text-[11px] text-muted uppercase tracking-[0.12em] mb-2.5">
-          Metric breakdown
+        <SectionMarker code="A.01" label="Metric Breakdown" className="mb-3" />
+        <div className="border border-border-strong overflow-x-auto bg-panel">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-border-strong">
+                <th className="t-label text-left px-3 py-2">Metric</th>
+                <th className="t-label text-right px-2 py-2 w-12">L</th>
+                <th className="t-label text-left px-2 py-2">Left</th>
+                <th className="t-label text-center px-2 py-2 w-16">Δ</th>
+                <th className="t-label text-right px-2 py-2">Right</th>
+                <th className="t-label text-left px-2 py-2 w-12">R</th>
+              </tr>
+            </thead>
+            <tbody>
+              {METRIC_KEYS.map((k) => (
+                <MetricRow
+                  key={k}
+                  metric={k}
+                  valueA={a.metrics[k]}
+                  valueB={b.metrics[k]}
+                />
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div className="border border-border rounded-xl bg-panel divide-y divide-row-divider">
-          {METRIC_KEYS.map((k) => (
-            <BiDirectionalRow
-              key={k}
-              metric={k}
-              valueA={a.metrics[k]}
-              valueB={b.metrics[k]}
-            />
-          ))}
-        </div>
-        <div className="mt-3 text-sm text-muted2 flex flex-wrap gap-x-4 gap-y-1">
-          <span>
-            <span className="font-medium" style={{ color: 'var(--color-text)' }}>
-              {a.name}
-            </span>{' '}
-            wins <span className="font-mono text-red font-bold">{metricTally.aCount}</span>.
-          </span>
-          <span>
-            <span className="font-medium" style={{ color: 'var(--color-text)' }}>
-              {b.name}
-            </span>{' '}
-            wins <span className="font-mono text-red font-bold">{metricTally.bCount}</span>.
-          </span>
-          {metricTally.tied > 0 && (
-            <span>
-              Tied on <span className="font-mono font-bold">{metricTally.tied}</span>.
-            </span>
-          )}
-        </div>
+        <ResultLine
+          a={a.name}
+          b={b.name}
+          aCount={metricTally.aCount}
+          bCount={metricTally.bCount}
+          tied={metricTally.tied}
+        />
       </section>
 
       {/* 3. FORMULA SWITCHER */}
       <section className="space-y-5">
-        <div className="text-[11px] text-muted uppercase tracking-[0.12em]">
-          Try a different formula
-        </div>
+        <SectionMarker code="A.02" label="Try a different formula" />
         <PresetChips
           activePresetId={formula.id}
           isCustom={formula.id === 'custom'}
           onPresetChange={onPreset}
           onToggleCustom={() => {
-            /* No-op on this page — switching to "custom" requires sliders
-                which live on the home page. Future: open a modal sliders. */
+            /* Sliders live on the home page. */
           }}
         />
         <EraFilter value={initialEra} onChange={onEra} />
@@ -170,13 +182,13 @@ export function BattleCard({ a, b, initialFormula, initialEra, related }: Props)
           <button
             type="button"
             onClick={onCopy}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-red text-white text-xs font-medium hover:opacity-90 transition-opacity"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-curb-red text-curb-white font-mono uppercase text-[11px] tracking-[0.1em] hover:opacity-90 transition-opacity"
           >
-            <Copy size={13} />
-            Copy link
+            <Copy size={12} />
+            Copy Link
           </button>
           {toastVisible && (
-            <span className="absolute left-0 top-full mt-2 text-[11px] text-muted2 font-mono whitespace-nowrap">
+            <span className="absolute left-0 top-full mt-2 text-[10px] text-muted-2 font-mono uppercase tracking-[0.1em] whitespace-nowrap">
               Link copied
             </span>
           )}
@@ -184,9 +196,8 @@ export function BattleCard({ a, b, initialFormula, initialEra, related }: Props)
         <button
           type="button"
           onClick={onShareX}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-border2 bg-panel text-xs font-medium hover:border-red transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-border-strong text-muted font-mono uppercase text-[11px] tracking-[0.1em] hover:text-curb-red hover:border-curb-red transition-colors"
         >
-          {/* Simple X glyph as an inline SVG — no Lucide icon for X yet. */}
           <svg width={11} height={11} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
           </svg>
@@ -197,10 +208,8 @@ export function BattleCard({ a, b, initialFormula, initialEra, related }: Props)
       {/* 5. RELATED MATCHUPS */}
       {related.length > 0 && (
         <section>
-          <div className="text-[11px] text-muted uppercase tracking-[0.12em] mb-2.5">
-            More matchups
-          </div>
-          <div className="border border-border rounded-xl bg-panel divide-y divide-row-divider">
+          <SectionMarker code="A.03" label="More Matchups" className="mb-3" />
+          <div className="border-y border-border-strong divide-y divide-border bg-panel">
             {related.map((d) => (
               <Link
                 key={d.driverId}
@@ -208,15 +217,17 @@ export function BattleCard({ a, b, initialFormula, initialEra, related }: Props)
                   pathname: `/vs/${a.driverId}/${d.driverId}`,
                   search: encodeFormula(formula, initialEra).toString(),
                 }}
-                className="grid items-center gap-3 px-5 py-3 hover:bg-[rgba(239,51,64,0.04)] transition-colors [grid-template-columns:1fr_auto]"
+                className="grid items-center gap-3 px-5 py-3 hover:bg-panel-2 transition-colors [grid-template-columns:1fr_auto]"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="text-lg shrink-0">{flagOf(d.countryCode)}</span>
-                  <span className="font-display text-[16px] sm:text-[18px] font-medium tracking-[-0.01em] font-vary-[opsz_36] truncate">
-                    {a.name} <span className="text-red italic">vs</span> {d.name}
+                  <span className="text-lg shrink-0" aria-hidden="true">{flagOf(d.countryCode)}</span>
+                  <span className="font-display font-bold uppercase text-[14px] sm:text-[16px] tracking-[-0.02em] truncate">
+                    {a.name}{' '}
+                    <span className="text-sector-purple font-black mx-1">VS</span>{' '}
+                    {d.name}
                   </span>
                 </div>
-                <span className="font-mono text-sm text-muted2 tabular-nums">
+                <span className="t-value text-text text-[14px] tabular">
                   {d.score.toFixed(1)}
                 </span>
               </Link>
@@ -232,7 +243,7 @@ export function BattleCard({ a, b, initialFormula, initialEra, related }: Props)
 // Pieces
 // ────────────────────────────────────────────────────────────────────────────
 
-function DriverColumn({
+function DriverIdentity({
   driver,
   score,
   winning,
@@ -243,45 +254,58 @@ function DriverColumn({
   winning: boolean
   align: 'left' | 'right'
 }) {
-  // Right-side driver renders flag on the right of the name (mirror layout)
-  // so the two driver columns visually frame the central "vs" centerpiece.
-  const colClass = align === 'right' ? 'text-right items-end' : 'text-left items-start'
-  const headerRowClass =
-    align === 'right' ? 'flex-row-reverse justify-start' : 'justify-start'
-  return (
-    <div className={`flex flex-col gap-1 min-w-0 ${colClass}`}>
-      <div className={`flex items-center gap-3 sm:gap-4 min-w-0 w-full ${headerRowClass}`}>
-        <span
-          className="leading-none shrink-0"
-          style={{ fontSize: 'clamp(28px, 4vw, 36px)' }}
-          aria-label={driver.countryCode ?? 'unknown'}
-        >
-          {flagOf(driver.countryCode)}
-        </span>
-        <div
-          className="font-display font-normal tracking-[-0.02em] font-vary-[opsz_72,wght_400] leading-[1.05] truncate min-w-0"
-          style={{ fontSize: 'clamp(20px, 3.5vw, 36px)' }}
-        >
-          {driver.name}
-        </div>
-      </div>
-      <div className="text-[11px] text-muted font-mono">
-        {driver.firstYear}–{driver.lastYear}
+  const number = raceNumberFor(driver.driverId)
+  const isRight = align === 'right'
+  const numberBox = (
+    <RaceNumberBox
+      number={number}
+      initials={number ? null : initialsFor(driver.name)}
+      accent={winning ? 'sector-purple' : 'muted'}
+    />
+  )
+  const identity = (
+    <div className={`min-w-0 ${isRight ? 'text-right' : 'text-left'}`}>
+      <div
+        className="font-display font-extrabold uppercase tracking-[-0.03em] leading-[1] truncate"
+        style={{ fontSize: 'clamp(20px, 3.5vw, 36px)' }}
+      >
+        {driver.name}
       </div>
       <div
-        className={
-          'font-mono font-bold tracking-[-0.02em] leading-none mt-2 ' +
-          (winning ? 'text-red' : 'text-muted2')
-        }
+        className={`mt-2 font-mono uppercase text-[10px] tracking-[0.12em] text-muted-2 flex flex-wrap items-center gap-x-2 gap-y-1 ${
+          isRight ? 'justify-end' : ''
+        }`}
+      >
+        <span aria-hidden="true">{flagOf(driver.countryCode)}</span>
+        <span>{driver.countryCode ?? '—'}</span>
+        <span>·</span>
+        <span>
+          {driver.firstYear}–{driver.lastYear}
+        </span>
+      </div>
+      <div
+        className={`mt-3 t-value tabular leading-none ${
+          winning ? 'text-sector-purple' : 'text-muted'
+        }`}
         style={{ fontSize: 'clamp(36px, 6vw, 56px)' }}
       >
         {score.toFixed(1)}
       </div>
     </div>
   )
+  return (
+    <div
+      className={`flex items-center gap-4 min-w-0 ${
+        isRight ? 'justify-end flex-row-reverse text-right' : 'justify-start'
+      }`}
+    >
+      {numberBox}
+      {identity}
+    </div>
+  )
 }
 
-function BiDirectionalRow({
+function MetricRow({
   metric,
   valueA,
   valueB,
@@ -290,53 +314,84 @@ function BiDirectionalRow({
   valueA: number
   valueB: number
 }) {
-  // Round to whole units to match the displayed values. Without this, a
-  // metric where one driver scored 29.4 and the other 29.0 reads as "29 vs
-  // 29" to the user but renders with mismatched bars and a red winner —
-  // confusing. Comparing rounded ints keeps what-you-see consistent.
   const a = Math.round(valueA)
   const b = Math.round(valueB)
-  // Scale so the larger of the two reaches the visible edge. Avoids both
-  // bars stuck at ~5% just because neither driver dominates that metric
-  // (e.g. fastest laps for two early-90s drivers).
   const max = Math.max(a, b, 1)
   const pctA = (a / max) * 100
   const pctB = (b / max) * 100
   const aLeads = a > b
   const bLeads = b > a
+  const tied = a === b
+
+  const delta = a - b
+  const deltaLabel = tied ? '=' : delta > 0 ? `+${delta}` : `${delta}`
+
+  const aBar = aLeads ? 'bg-sector-purple' : tied ? 'bg-sector-yellow' : 'bg-muted-2'
+  const bBar = bLeads ? 'bg-sector-purple' : tied ? 'bg-sector-yellow' : 'bg-muted-2'
+  const deltaColor = tied
+    ? 'text-sector-yellow'
+    : aLeads
+      ? 'text-sector-purple'
+      : 'text-sector-purple'
 
   return (
-    <div className="grid items-center px-5 py-3 gap-2 sm:gap-4 [grid-template-columns:1fr_minmax(110px,160px)_1fr]">
-      {/* A side: bar grows from CENTER toward LEFT */}
-      <div className="flex items-center gap-2 justify-end min-w-0">
-        <span className="font-mono text-xs text-muted tabular-nums w-10 text-right shrink-0">
-          {a}
-        </span>
-        <div className="flex-1 h-2 bg-border rounded-full overflow-hidden flex justify-end">
-          <div
-            className={'h-full rounded-full ' + (aLeads ? 'bg-red' : 'bg-muted2')}
-            style={{ width: `${pctA}%` }}
-          />
+    <tr className="border-b border-border last:border-b-0">
+      <th
+        scope="row"
+        className="font-mono uppercase text-[11px] tracking-[0.1em] text-muted text-left px-3 py-2.5 whitespace-nowrap"
+      >
+        {METRIC_LABELS[metric]}
+      </th>
+      <td className="t-value text-right text-[13px] text-text px-2 py-2.5 tabular">{a}</td>
+      <td className="px-2 py-2.5">
+        <div className="h-2 bg-border overflow-hidden flex justify-end" aria-hidden="true">
+          <div className={`h-full ${aBar}`} style={{ width: `${pctA}%` }} />
         </div>
-      </div>
-
-      {/* Label */}
-      <div className="text-center px-1">
-        <div className="text-[12px] text-muted">{METRIC_LABELS[metric]}</div>
-      </div>
-
-      {/* B side: bar grows from CENTER toward RIGHT */}
-      <div className="flex items-center gap-2 min-w-0">
-        <div className="flex-1 h-2 bg-border rounded-full overflow-hidden">
-          <div
-            className={'h-full rounded-full ' + (bLeads ? 'bg-red' : 'bg-muted2')}
-            style={{ width: `${pctB}%` }}
-          />
+      </td>
+      <td
+        className={`t-value text-center text-[12px] tabular px-2 py-2.5 ${deltaColor}`}
+      >
+        {deltaLabel}
+      </td>
+      <td className="px-2 py-2.5">
+        <div className="h-2 bg-border overflow-hidden" aria-hidden="true">
+          <div className={`h-full ${bBar}`} style={{ width: `${pctB}%` }} />
         </div>
-        <span className="font-mono text-xs text-muted tabular-nums w-10 shrink-0">
-          {b}
-        </span>
-      </div>
+      </td>
+      <td className="t-value text-left text-[13px] text-text px-2 py-2.5 tabular">{b}</td>
+    </tr>
+  )
+}
+
+function ResultLine({
+  a,
+  b,
+  aCount,
+  bCount,
+  tied,
+}: {
+  a: string
+  b: string
+  aCount: number
+  bCount: number
+  tied: number
+}) {
+  const aColor = aCount > bCount ? 'text-sector-purple' : 'text-muted'
+  const bColor = bCount > aCount ? 'text-sector-purple' : 'text-muted'
+  return (
+    <div className="mt-3 font-mono uppercase tracking-[0.1em] text-[12px] flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="text-muted-2">Result —</span>
+      <span className={aColor}>
+        {a} <span className="t-value">{aCount}</span>
+      </span>
+      <span className="text-muted-2">·</span>
+      <span className="text-sector-yellow">
+        Draw <span className="t-value">{tied}</span>
+      </span>
+      <span className="text-muted-2">·</span>
+      <span className={bColor}>
+        {b} <span className="t-value">{bCount}</span>
+      </span>
     </div>
   )
 }

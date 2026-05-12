@@ -7,6 +7,9 @@ import type { EraId } from '@/lib/f1db/types'
 import type { Formula, ScoredDriver } from '@/lib/scoring/types'
 import { encodeFormula } from '@/lib/url-state/encode'
 import { flagOf } from '@/lib/flags'
+import { initialsFor, raceNumberFor } from '@/lib/driver-numbers'
+import { SectionMarker } from '@/components/atoms/SectionMarker'
+import { RaceNumberBox } from '@/components/atoms/RaceNumberBox'
 
 type Props = {
   ranked: ScoredDriver[]
@@ -32,7 +35,6 @@ export function VersusPicker({ ranked, formula, era, seedDriverId }: Props) {
     setPicks((prev) => {
       if (prev.includes(driverId)) return prev.filter((id) => id !== driverId)
       if (prev.length < MAX_PICKS) return [...prev, driverId]
-      // Already at MAX. Drop the oldest, append the new one.
       return [...prev.slice(1), driverId]
     })
   }
@@ -52,36 +54,35 @@ export function VersusPicker({ ranked, formula, era, seedDriverId }: Props) {
   return (
     <div className="space-y-8">
       <section>
-        <h1
-          className="font-display font-normal leading-[0.95] tracking-[-0.03em] font-vary-[opsz_144,wght_400] m-0"
-          style={{ fontSize: 'clamp(36px, 5vw, 60px)', maxWidth: 900 }}
-        >
-          Pick two.{' '}
-          <em className="italic text-red font-vary-[opsz_144,wght_500]">Settle it.</em>
+        <SectionMarker code="B" label="Versus Picker" className="mb-4" />
+        <h1 className="t-headline m-0">
+          Pick Two.{' '}
+          <span className="text-sector-purple">
+            <span aria-hidden="true">[ </span>Settle It<span aria-hidden="true"> ]</span>
+          </span>
         </h1>
-        <p className="text-[15px] text-muted max-w-[620px] leading-[1.5] mt-3">
+        <p className="t-body-muted max-w-[620px] mt-3">
           Choose any two drivers and we&rsquo;ll lay them out side-by-side under your current
           formula.
         </p>
       </section>
 
-      {/* Sticky banner — always present, but content shifts as picks change. */}
       <div
-        className="sticky top-0 z-10 -mx-4 sm:-mx-8 px-4 sm:px-8 py-3 backdrop-blur border-b border-border flex items-center justify-between gap-4"
-        style={{ background: 'color-mix(in srgb, var(--color-bg) 92%, transparent)' }}
+        className="sticky top-0 z-10 -mx-4 md:mx-0 px-4 md:px-5 py-3 backdrop-blur border-y border-border-strong flex items-center justify-between gap-4"
+        style={{ background: 'color-mix(in srgb, var(--color-panel) 92%, transparent)' }}
       >
-        <div className="text-[11px] sm:text-xs text-muted2 min-w-0">
+        <div className="font-mono uppercase text-[11px] tracking-[0.1em] min-w-0">
           {canCompare && a && b ? (
-            <span className="flex items-center gap-2 flex-wrap">
-              <span className="text-muted uppercase tracking-[0.12em]">Selected:</span>
-              <span className="truncate" style={{ color: 'var(--color-text)' }}>{a.name}</span>
-              <span className="text-red font-display italic font-vary-[opsz_36,wght_500]">vs</span>
-              <span className="truncate" style={{ color: 'var(--color-text)' }}>{b.name}</span>
+            <span className="flex items-center gap-2 flex-wrap text-text">
+              <span className="text-muted-2">Selected —</span>
+              <span className="truncate">{a.name}</span>
+              <span className="text-sector-purple font-black">VS</span>
+              <span className="truncate">{b.name}</span>
             </span>
           ) : picks.length === 1 ? (
-            <span className="uppercase tracking-[0.12em] text-muted">Pick 1 more driver</span>
+            <span className="text-muted">Pick 1 more driver</span>
           ) : (
-            <span className="uppercase tracking-[0.12em] text-muted">Pick 2 drivers</span>
+            <span className="text-muted">Pick 2 drivers</span>
           )}
         </div>
         <button
@@ -89,54 +90,60 @@ export function VersusPicker({ ranked, formula, era, seedDriverId }: Props) {
           onClick={onCompare}
           disabled={!canCompare}
           className={
-            'shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium transition-colors ' +
+            'shrink-0 flex items-center gap-1.5 px-3 py-1.5 font-mono uppercase text-[11px] tracking-[0.1em] transition-colors ' +
             (canCompare
-              ? 'bg-red text-white hover:opacity-90'
-              : 'border border-border2 bg-panel text-muted2 cursor-not-allowed')
+              ? 'bg-curb-red text-curb-white hover:opacity-90'
+              : 'border border-border-strong text-muted-2 cursor-not-allowed')
           }
         >
-          <ArrowLeftRight size={13} />
+          <ArrowLeftRight size={12} />
           Compare
         </button>
       </div>
 
-      <section>
+      <section className="border-y border-border-strong bg-panel">
         {ranked.slice(0, 50).map((d, idx) => {
           const checked = picks.includes(d.driverId)
           const flag = flagOf(d.countryCode)
+          const number = raceNumberFor(d.driverId)
           return (
             <button
               key={d.driverId}
               type="button"
               onClick={() => togglePick(d.driverId)}
               className={
-                'w-full grid items-center gap-3 sm:gap-5 px-3 sm:px-5 py-3 border-b border-row-divider text-left transition-colors [grid-template-columns:44px_1fr_auto_24px] sm:[grid-template-columns:56px_1fr_auto_28px] ' +
-                (checked ? 'bg-[rgba(239,51,64,0.06)]' : 'hover:bg-panel')
+                'w-full grid items-center gap-3 sm:gap-5 px-3 sm:px-5 py-3 border-b border-border text-left transition-colors ' +
+                '[grid-template-columns:36px_32px_1fr_auto_24px] sm:[grid-template-columns:48px_36px_1fr_auto_24px] ' +
+                (checked ? 'bg-panel-raised' : 'hover:bg-panel-2')
               }
             >
-              <span
-                className="font-display font-bold leading-none tracking-[-0.04em] font-vary-[opsz_72,wght_700] text-muted2"
-                style={{ fontSize: 22 }}
-              >
+              <span className="t-rank text-muted text-right" style={{ fontSize: 22 }}>
                 {String(idx + 1).padStart(2, '0')}
               </span>
+              <RaceNumberBox
+                number={number}
+                initials={number ? null : initialsFor(d.name)}
+                accent={checked ? 'sector-purple' : 'muted'}
+              />
               <span className="flex items-center gap-2.5 min-w-0">
-                <span className="text-base shrink-0">{flag}</span>
-                <span className="font-display text-[16px] sm:text-[18px] font-medium tracking-[-0.01em] font-vary-[opsz_36] truncate">
+                <span className="text-base shrink-0" aria-hidden="true">{flag}</span>
+                <span className="font-display font-bold uppercase tracking-[-0.02em] text-[14px] sm:text-[16px] truncate">
                   {d.name}
                 </span>
-                <span className="hidden sm:inline text-[11px] text-muted font-mono">
+                <span className="hidden sm:inline font-mono uppercase text-[10px] tracking-[0.1em] text-muted-2">
                   {d.firstYear}–{d.lastYear}
                 </span>
               </span>
-              <span className="font-mono text-[16px] sm:text-[18px] font-bold tabular-nums">
+              <span className="t-value text-text text-[14px] sm:text-[16px] tabular">
                 {d.score.toFixed(1)}
               </span>
               <span
                 aria-hidden
                 className={
-                  'w-5 h-5 rounded border flex items-center justify-center justify-self-end transition-colors ' +
-                  (checked ? 'border-red bg-red text-white' : 'border-border2')
+                  'w-5 h-5 border flex items-center justify-center justify-self-end transition-colors ' +
+                  (checked
+                    ? 'border-curb-red bg-curb-red text-curb-white'
+                    : 'border-border-strong')
                 }
               >
                 {checked ? '✓' : ''}

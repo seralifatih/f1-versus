@@ -1,29 +1,42 @@
-const VERSION = 'v0.1.0'
+import {
+  APP_VERSION,
+  BUILD_DATA_SYNC,
+  BUILD_DATA_VERSION,
+  TOTAL_DRIVERS,
+} from '@/lib/build-info'
 
 export function Footer() {
   return (
-    <footer className="mt-16 pt-6 border-t border-border flex justify-between items-center text-xs text-muted2">
-      <span>
-        Data:{' '}
-        <a
-          href="https://github.com/f1db/f1db"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted hover:text-current transition-colors"
-        >
-          F1DB
-        </a>{' '}
-        · Unofficial · Built by{' '}
-        <a
-          href="https://noktastudio.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-red hover:underline"
-        >
-          Nokta Studio
-        </a>
-      </span>
-      <span className="font-mono">{VERSION}</span>
+    <footer className="mt-16 pt-4 border-t border-border-strong font-mono uppercase text-[10px] tracking-[0.12em] text-muted-2 flex flex-wrap items-start justify-between gap-y-1 gap-x-6">
+      <div className="space-y-1">
+        <div>
+          DATA{' '}
+          <a
+            href="https://github.com/f1db/f1db"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted hover:text-curb-red transition-colors"
+          >
+            {BUILD_DATA_VERSION}
+          </a>{' '}
+          · {TOTAL_DRIVERS.toLocaleString()} Drivers · Last Sync {BUILD_DATA_SYNC}
+        </div>
+        <div>
+          Unofficial · Built by{' '}
+          <a
+            href="https://noktastudio.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-curb-red hover:underline"
+          >
+            Nokta Studio
+          </a>{' '}
+          · MIT Licensed
+        </div>
+      </div>
+      <div className="text-right md:text-right">
+        {APP_VERSION} · § End of Document
+      </div>
     </footer>
   )
 }

@@ -7,35 +7,29 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Background + surface tokens
-        ink: 'var(--color-bg)',
+        // ── New FIA-technical palette ──────────────────────────────
+        bg: 'var(--color-bg)',
         panel: 'var(--color-panel)',
-        panel2: 'var(--color-panel-2)',
-        // Border tokens. `border` shadows Tailwind's default border-color
-        // utility — that's intentional, `border-border` resolves to this var.
+        'panel-2': 'var(--color-panel-2)',
+        'panel-raised': 'var(--color-panel-raised)',
         border: 'var(--color-border)',
-        border2: 'var(--color-border-2)',
-        // Text tokens
+        'border-strong': 'var(--color-border-strong)',
+        'border-bright': 'var(--color-border-bright)',
+        text: 'var(--color-text)',
         muted: 'var(--color-text-muted)',
-        muted2: 'var(--color-text-muted-2)',
-        // Accent: `red` and `accent` are aliases for the same token. `red`
-        // was the original brand-color class name across the codebase; we
-        // keep it working so nothing has to be renamed.
-        red: 'var(--color-accent)',
-        accent: 'var(--color-accent)',
-        'accent-faint': 'var(--color-accent-faint)',
-        'accent-gradient': 'var(--color-accent-gradient)',
-        // Misc theme-aware tokens
-        'bar-track': 'var(--color-bar-track)',
-        'bar-loser': 'var(--color-bar-loser)',
-        'row-divider': 'var(--color-row-divider)',
-        'rank-podium': 'var(--color-rank-podium)',
-        'rank-rest': 'var(--color-rank-rest)',
+        'muted-2': 'var(--color-text-muted-2)',
+        dim: 'var(--color-text-dim)',
+        'sector-purple': 'var(--color-sector-purple)',
+        'sector-green': 'var(--color-sector-green)',
+        'sector-yellow': 'var(--color-sector-yellow)',
+        'sector-red': 'var(--color-sector-red)',
+        'curb-red': 'var(--color-curb-red)',
+        'curb-white': 'var(--color-curb-white)',
       },
       fontFamily: {
-        display: ['var(--font-display)', 'serif'],
+        display: ['var(--font-display)', 'system-ui', 'sans-serif'],
         body: ['var(--font-body)', 'system-ui', 'sans-serif'],
-        mono: ['var(--font-mono)', 'monospace'],
+        mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
       },
       letterSpacing: {
         tightest: '-0.04em',

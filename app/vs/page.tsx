@@ -19,8 +19,12 @@ export default async function VsPickerPage({
   const drivers = await getAllDriverStats(era)
   const ranked = rank(drivers, formula.weights)
 
-  const seed = params.get('seed')
-  const seedDriverId = seed && ranked.some((d) => d.driverId === seed) ? seed : null
+  // `preselect` is the canonical param (set by the ranking row VS button).
+  // `seed` is the legacy name kept so shared URLs from earlier builds still
+  // pre-fill the picker.
+  const requested = params.get('preselect') ?? params.get('seed')
+  const seedDriverId =
+    requested && ranked.some((d) => d.driverId === requested) ? requested : null
 
   return <VersusPicker ranked={ranked} formula={formula} era={era} seedDriverId={seedDriverId} />
 }

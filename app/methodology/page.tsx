@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { SectionMarker } from '@/components/atoms/SectionMarker'
 
 export const metadata: Metadata = {
   title: 'Methodology — f1·versus',
@@ -6,31 +7,39 @@ export const metadata: Metadata = {
     'How f1·versus scores every F1 driver: the data source, the nine metrics, era normalization, and what this tool deliberately cannot measure.',
 }
 
+const TOTAL_PAGES = 5
+
 export default function MethodologyPage() {
   return (
-    <article className="max-w-[720px] mx-auto py-8 space-y-12 leading-[1.65]">
+    <article className="max-w-[680px] py-4 leading-[1.6] text-[15px]">
       <header className="space-y-4">
+        <SectionMarker code="00" label="Methodology" />
         <h1
-          className="font-display font-normal tracking-[-0.03em] font-vary-[opsz_144,wght_400] leading-[1.05]"
-          style={{ fontSize: 'clamp(40px, 5vw, 64px)' }}
+          className="font-display font-extrabold uppercase tracking-[-0.04em] leading-[0.95] m-0"
+          style={{ fontSize: 'clamp(40px, 6vw, 64px)' }}
         >
           Methodology
         </h1>
-        <p className="text-[17px] text-muted2 leading-[1.6]">
+        <p className="t-body text-muted">
           A ranking is only as honest as the math behind it. This page documents exactly how
           f1·versus turns 75 years of race results into a single score per driver — and, just
           as importantly, what it doesn&rsquo;t try to measure.
         </p>
       </header>
 
-      <Section heading="Where the data comes from">
+      <PullQuote>
+        Every metric on this page comes from a query you could write yourself
+        against the F1DB SQLite file.
+      </PullQuote>
+
+      <Section number={1} page={1} title="Where the data comes from">
         <p>
           Every number you see comes from{' '}
           <a
             href="https://github.com/f1db/f1db"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-red hover:underline"
+            className="text-curb-red hover:underline"
           >
             F1DB
           </a>
@@ -46,7 +55,7 @@ export default function MethodologyPage() {
         </p>
       </Section>
 
-      <Section heading="The nine metrics">
+      <Section number={2} page={2} title="The nine metrics">
         <p>
           Each driver gets a 0–100 score on nine independent dimensions. The score is
           min-max normalized within the selected era, so &ldquo;100&rdquo; means &ldquo;best
@@ -54,66 +63,66 @@ export default function MethodologyPage() {
           decides how heavily each dimension counts.
         </p>
 
-        <Metric name="Championships">
+        <Subsection number="2.1" title="Championships">
           Count of season-ending championships won (position 1 in the final standings). The
           purest, most-cited statistic — but also the one most distorted by car quality, so it
           rewards drivers who spent their careers in dominant machinery.
-        </Metric>
+        </Subsection>
 
-        <Metric name="Wins">
+        <Subsection number="2.2" title="Wins">
           Race wins. Counts only main-event Grand Prix results — sprint races are excluded since
           they have a different scoring history and only existed for a handful of recent seasons.
-        </Metric>
+        </Subsection>
 
-        <Metric name="Podiums">
+        <Subsection number="2.3" title="Podiums">
           Top-three finishes. A softer measure than wins; rewards consistency in good machinery
           and shows up brightly for drivers who were perpetually second-best to a dominant
           teammate.
-        </Metric>
+        </Subsection>
 
-        <Metric name="Poles">
+        <Subsection number="2.4" title="Poles">
           Pole positions — finishing first in qualifying. The cleanest measure of one-lap pace
           but skewed by qualifying format changes (1950s aggregate timing, 2003 single-lap,
           2006-present knockout) which we do not currently normalize for.
-        </Metric>
+        </Subsection>
 
-        <Metric name="Fastest Laps">
+        <Subsection number="2.5" title="Fastest Laps">
           Number of races where the driver set the fastest lap. From 2019 onward this is also
           worth a championship point if you finish in the top ten, which subtly changes
           how teams pursue it.
-        </Metric>
+        </Subsection>
 
-        <Metric name="Win Rate">
+        <Subsection number="2.6" title="Win Rate">
           Wins divided by races started. A correction for career length: it lets short, dominant
           careers (Fangio, Clark) sit alongside long, prolific ones (Hamilton, Schumacher)
           without being buried by raw totals.
-        </Metric>
+        </Subsection>
 
-        <Metric name="Teammate H2H">
+        <Subsection number="2.7" title="Teammate H2H">
           The fairest comparison Formula 1 offers, with the most signal per data point. For every
           race where two teammates both finish with a valid classified position, we compare
           their results and credit the higher finisher. We do this for races and for qualifying
           sessions separately, then average the two rates. A score of 100 means the driver
           beat every teammate in every comparable session — an empirically impossible bar that
           even the all-time greats fall short of.
-        </Metric>
+        </Subsection>
 
-        <Metric name="Longevity">
+        <Subsection number="2.8" title="Longevity">
           Career years (last season minus first season, inclusive). Rewards drivers who stayed
           relevant across rule changes, team transitions, and physical decline. Heavily favored
           by the Longevity preset; close to zero in the Peak Performance preset.
-        </Metric>
+        </Subsection>
 
-        <Metric name="Peak Dominance">
+        <Subsection number="2.9" title="Peak Dominance">
           The single best three-consecutive-season window of a driver&rsquo;s career, measured
           as the sum of their share of total championship points in those three seasons. A
           driver who took 25% of all points scored across a three-year run gets a high peak
           score. This is the metric that surfaces Vettel 2010–12, Schumacher 2002–04, Hamilton
           2018–20 — eras of true dominance that get diluted in lifetime averages.
-        </Metric>
+        </Subsection>
       </Section>
 
-      <Section heading="How era normalization works">
+      <Section number={3} page={3} title="How era normalization works">
         <p>
           Choosing &ldquo;Era Normalized&rdquo; (or any specific era filter) does two things.
           First, the driver pool is restricted to people who actually raced in that era —
@@ -122,7 +131,7 @@ export default function MethodologyPage() {
         </p>
         <p>
           Second, and more importantly, the min-max normalization happens{' '}
-          <em className="italic font-vary-[opsz_24,wght_500] font-semibold">within</em>{' '}
+          <strong className="font-semibold uppercase tracking-[0.02em]">within</strong>{' '}
           the era. A pre-1979 driver&rsquo;s &ldquo;wins&rdquo; score isn&rsquo;t being
           compared to Hamilton&rsquo;s 100+; it&rsquo;s being compared to peers who raced 8–16
           times per season instead of 22+. This is the right correction for season length,
@@ -136,7 +145,7 @@ export default function MethodologyPage() {
         </p>
       </Section>
 
-      <Section heading="What we deliberately don't measure">
+      <Section number={4} page={4} title="What we deliberately don't measure">
         <p>
           Formula 1 has a lively folklore of intangibles — race craft, wet-weather skill,
           ability to set up a car, mental fortitude under championship pressure. None of these
@@ -151,35 +160,30 @@ export default function MethodologyPage() {
           real time. That&rsquo;s the wedge.
         </p>
         <p>
-          Things you will <em className="italic">not</em> find here, and the reason for each:
+          Things you will <strong className="font-semibold">not</strong> find here, and the
+          reason for each:
         </p>
-        <ul className="space-y-2 list-none pl-0">
-          <li>
-            <strong>Wet-weather wins.</strong> The weather flag in F1DB
-            is sparse and inconsistent before 1990, and &ldquo;wet&rdquo; is a continuum, not a
-            binary.
-          </li>
-          <li>
-            <strong>Race craft / overtaking.</strong> Position-change
-            data only exists reliably from the late 1990s onward, and even then it conflates
-            driver skill with car pace and pit-stop strategy.
-          </li>
-          <li>
-            <strong>Car quality adjustment.</strong> We could attempt
-            it (regress driver results against teammate results to back out the car), but the
-            assumption that teammates have equal equipment is regularly false. We&rsquo;d be
-            adding noise dressed up as rigor.
-          </li>
-          <li>
-            <strong>Single-race performances.</strong> Monaco 1984.
-            Donington 1993. Brazil 2008. These belong in the lore, not in a ranking.
-          </li>
-        </ul>
+        <ol className="space-y-3 list-none pl-0 mt-4">
+          <Clause id="4.1" title="Wet-weather wins">
+            The weather flag in F1DB is sparse and inconsistent before 1990, and
+            &ldquo;wet&rdquo; is a continuum, not a binary.
+          </Clause>
+          <Clause id="4.2" title="Race craft / overtaking">
+            Position-change data only exists reliably from the late 1990s onward, and even
+            then it conflates driver skill with car pace and pit-stop strategy.
+          </Clause>
+          <Clause id="4.3" title="Car quality adjustment">
+            We could attempt it (regress driver results against teammate results to back out the
+            car), but the assumption that teammates have equal equipment is regularly false.
+            We&rsquo;d be adding noise dressed up as rigor.
+          </Clause>
+          <Clause id="4.4" title="Single-race performances">
+            Monaco 1984. Donington 1993. Brazil 2008. These belong in the lore, not in a
+            ranking.
+          </Clause>
+        </ol>
 
-        <h3 className="font-display text-[20px] font-medium tracking-[-0.01em] font-vary-[opsz_48,wght_500] mt-8">
-          Indianapolis 500 (1950–1960)
-        </h3>
-        <p>
+        <Subsection number="4.5" title="Indianapolis 500 (1950–1960)">
           The F1DB dataset lists the Indianapolis 500 as a round of the Formula 1 World
           Championship from 1950 to 1960. This is historically accurate but misleading: the race
           was contested almost entirely by American oval specialists who did not race the rest
@@ -189,10 +193,10 @@ export default function MethodologyPage() {
           metric, and we remove drivers whose only championship appearances were at
           Indianapolis. Drivers who raced in both F1 and Indy 500 (like Mario Andretti) are
           kept, but only their non-Indy F1 results count.
-        </p>
+        </Subsection>
       </Section>
 
-      <Section heading="Limitations">
+      <Section number={5} page={5} title="Limitations">
         <p>
           A ranking like this can tell you a few things and cannot tell you many others. To be
           explicit about both:
@@ -228,27 +232,82 @@ export default function MethodologyPage() {
   )
 }
 
-function Section({ heading, children }: { heading: string; children: React.ReactNode }) {
+function Section({
+  number,
+  page,
+  title,
+  children,
+}: {
+  number: number
+  page: number
+  title: string
+  children: React.ReactNode
+}) {
   return (
-    <section className="space-y-4">
-      <h2
-        className="font-display font-medium tracking-[-0.02em] font-vary-[opsz_72,wght_500] leading-[1.1] mt-6"
-        style={{ fontSize: 'clamp(28px, 3.5vw, 36px)' }}
-      >
-        {heading}
-      </h2>
-      <div className="space-y-4 text-[17px]">{children}</div>
+    <section className="mt-12 pt-6 border-t border-border-strong">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="font-display font-extrabold uppercase tracking-[-0.03em] text-[20px] leading-tight m-0">
+          § {number}. {title}
+        </h2>
+        <span className="t-label text-muted-2 whitespace-nowrap">
+          p. {page} of {TOTAL_PAGES}
+        </span>
+      </div>
+      <div className="space-y-4">{children}</div>
     </section>
   )
 }
 
-function Metric({ name, children }: { name: string; children: React.ReactNode }) {
+function Subsection({
+  number,
+  title,
+  children,
+}: {
+  number: string
+  title: string
+  children: React.ReactNode
+}) {
   return (
-    <div className="space-y-1.5">
-      <h3 className="font-display text-[20px] font-medium tracking-[-0.01em] font-vary-[opsz_48,wght_500] mt-4">
-        {name}
+    <div className="mt-6 space-y-2">
+      <h3 className="font-display font-bold uppercase tracking-[-0.02em] text-[14px] leading-tight">
+        § {number} {title}
       </h3>
-      <p className="text-[17px]">{children}</p>
+      <p className="t-body">{children}</p>
     </div>
+  )
+}
+
+function Clause({
+  id,
+  title,
+  children,
+}: {
+  id: string
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <li className="grid gap-3 [grid-template-columns:48px_1fr]">
+      <span className="t-label text-muted-2 pt-0.5">§ {id}</span>
+      <div>
+        <span className="font-display font-bold uppercase text-[13px] tracking-[-0.01em]">
+          {title}.
+        </span>{' '}
+        <span className="t-body">{children}</span>
+      </div>
+    </li>
+  )
+}
+
+function PullQuote({ children }: { children: React.ReactNode }) {
+  return (
+    <aside
+      className="my-10 pl-5 border-l-2 border-sector-purple"
+      aria-label="Pull quote"
+    >
+      <p className="font-display font-black uppercase tracking-[-0.03em] text-[22px] leading-tight m-0">
+        {children}
+      </p>
+    </aside>
   )
 }

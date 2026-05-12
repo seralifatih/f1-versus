@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
-import { Fraunces, Inter_Tight, JetBrains_Mono } from 'next/font/google'
+import { Archivo, Inter, JetBrains_Mono } from 'next/font/google'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
+import { Frame } from '@/components/layout/Frame'
+import { RightGutter } from '@/components/layout/RightGutter'
 import { ThemeProvider } from '@/components/theme/ThemeProvider'
 import { SITE_URL } from '@/lib/config'
 import './globals.css'
@@ -15,25 +17,25 @@ const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem('f1versus-
 
 const CF_ANALYTICS_TOKEN = process.env.NEXT_PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN
 
-const fraunces = Fraunces({
+const archivo = Archivo({
   subsets: ['latin'],
-  display: 'swap',
+  weight: ['400', '500', '600', '700', '800', '900'],
   variable: '--font-display',
-  axes: ['opsz'],
+  display: 'swap',
 })
 
-const interTight = Inter_Tight({
+const inter = Inter({
   subsets: ['latin'],
-  display: 'swap',
+  weight: ['400', '500', '600', '700'],
   variable: '--font-body',
-  weight: ['400', '500', '600'],
+  display: 'swap',
 })
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  display: 'swap',
+  weight: ['400', '500', '700'],
   variable: '--font-mono',
-  weight: ['400', '700'],
+  display: 'swap',
 })
 
 function safeMetadataBase(): URL | undefined {
@@ -73,19 +75,29 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fraunces.variable} ${interTight.variable} ${jetbrainsMono.variable}`}
+      className={`${archivo.variable} ${inter.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body className="bg-ink font-body antialiased">
+      <body className="bg-bg font-body antialiased">
         <ThemeProvider>
           <Header />
-          <main className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-12 pb-24">
-            {children}
-            <Footer />
-          </main>
+          <Frame
+            leftGutter={
+              <div className="flex flex-col items-end gap-1 leading-tight">
+                <span>§ 01</span>
+                <span className="text-text">RANKING</span>
+              </div>
+            }
+            rightGutter={<RightGutter />}
+          >
+            <main className="pt-8 pb-16">
+              {children}
+              <Footer />
+            </main>
+          </Frame>
         </ThemeProvider>
         {CF_ANALYTICS_TOKEN && (
           <Script

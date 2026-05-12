@@ -2,47 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Theme tokens. Dark is the brand default; light is a warmer, print-magazine
-   palette with a darker accent (#c8141f) so the red still hits AA contrast on
-   off-white surfaces. The inline script in app/layout.tsx sets data-theme
-   before first paint to avoid FOUC. */
+/* Track-at-night dark theme is the brand default. Light theme is a
+   technical-document-on-white palette. Inline script in app/layout.tsx
+   sets data-theme before first paint to avoid FOUC. */
 :root,
 [data-theme='dark'] {
-  --color-bg: #0a0a0b;
-  --color-panel: #101012;
-  --color-panel-2: #141416;
-  --color-border: #1f1f22;
-  --color-border-2: #2a2a2e;
-  --color-text: #e8e8e8;
-  --color-text-muted: #888888;
-  --color-text-muted-2: #666666;
-  --color-accent: #ef3340;
-  --color-accent-faint: rgba(239, 51, 64, 0.08);
-  --color-accent-gradient: rgba(239, 51, 64, 0.12);
-  --color-rank-podium: #ffffff;
-  --color-rank-rest: #555555;
-  --color-bar-track: #1f1f22;
-  --color-bar-loser: #2a2a2e;
-  --color-row-divider: #161618;
+  /* surfaces */
+  --color-bg: #0c0c0d;
+  --color-panel: #131316;
+  --color-panel-2: #1a1a1e;
+  --color-panel-raised: #1e1e22;
+
+  /* borders */
+  --color-border: #26262c;
+  --color-border-strong: #3a3a42;
+  --color-border-bright: #5a5a64;
+
+  /* text */
+  --color-text: #ececed;
+  --color-text-muted: #9a9aa3;
+  --color-text-muted-2: #6a6a72;
+  --color-text-dim: #45454c;
+
+  /* sector colors — functional, not decorative */
+  --color-sector-purple: #b026ff;
+  --color-sector-green: #00d563;
+  --color-sector-yellow: #ffcc00;
+  --color-sector-red: #ff1f3d;
+
+  /* curb (high contrast accent) */
+  --color-curb-red: #e6112d;
+  --color-curb-white: #ffffff;
+
+  /* race surface stripes */
+  --color-stripe-light: rgba(255, 255, 255, 0.03);
+  --color-stripe-dark: rgba(0, 0, 0, 0.3);
 }
 
 [data-theme='light'] {
-  --color-bg: #faf8f5;
+  --color-bg: #f4f3f0;
   --color-panel: #ffffff;
-  --color-panel-2: #f3efe9;
-  --color-border: #e6e1d8;
-  --color-border-2: #d3cdc1;
-  --color-text: #1a1a1c;
-  --color-text-muted: #5a5a5a;
-  --color-text-muted-2: #888888;
-  --color-accent: #c8141f;
-  --color-accent-faint: rgba(200, 20, 31, 0.06);
-  --color-accent-gradient: rgba(200, 20, 31, 0.1);
-  --color-rank-podium: #1a1a1c;
-  --color-rank-rest: #b8b3a8;
-  --color-bar-track: #ece6db;
-  --color-bar-loser: #d3cdc1;
-  --color-row-divider: #ece6db;
+  --color-panel-2: #ebe9e4;
+  --color-panel-raised: #ffffff;
+
+  --color-border: #d6d3cb;
+  --color-border-strong: #a9a59a;
+  --color-border-bright: #5a5750;
+
+  --color-text: #0c0c0d;
+  --color-text-muted: #545258;
+  --color-text-muted-2: #8a8790;
+  --color-text-dim: #c0bdb5;
+
+  --color-sector-purple: #8b00d6;
+  --color-sector-green: #008838;
+  --color-sector-yellow: #c89c00;
+  --color-sector-red: #c91126;
+
+  --color-curb-red: #c91126;
+  --color-curb-white: #ffffff;
+
+  --color-stripe-light: rgba(0, 0, 0, 0.025);
+  --color-stripe-dark: rgba(0, 0, 0, 0.04);
 }
 
 *,
@@ -66,6 +87,8 @@ html,
 body {
   background: var(--color-bg);
   color: var(--color-text);
+  /* Tabular numerals everywhere; ss01/cv11 are Inter stylistic sets. */
+  font-feature-settings: 'ss01', 'cv11', 'tnum';
   /* Color-only transitions. Layout/transform/animation properties are not
      in the list, so framer-motion FLIP and slider thumb tracking stay snappy. */
   transition:
@@ -75,52 +98,154 @@ body {
 
 body {
   font-family: var(--font-body), system-ui, sans-serif;
-  font-variation-settings: 'opsz' 14;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Share-button confirmation flash. Holds full opacity briefly so the user
+   notices, then fades cleanly back to bare button. Lives in globals
+   because Tailwind 3 arbitrary `animate-[...]` needs the keyframes at
+   document level — not inside @layer utilities. */
+@keyframes shareflash {
+  0% {
+    opacity: 1;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 ::selection {
-  background: var(--color-accent);
+  background: var(--color-curb-red);
   color: #fff;
 }
 
 input[type='range'] {
-  accent-color: var(--color-accent);
+  accent-color: var(--color-curb-red);
 }
 
-.weight-slider {
+/* Telemetry slider: 4px track w/ green→purple gradient fill set inline,
+   square 16px curb-red thumb, hard-edged focus ring. */
+.telemetry-slider {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
-  background: var(--color-bar-track);
-  border-radius: 999px;
+  background: transparent;
+  border: 0;
   outline: none;
+  padding: 0;
 }
 
-.weight-slider::-webkit-slider-thumb {
+.telemetry-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+
+.telemetry-slider::-moz-range-track {
+  height: 4px;
+  background: transparent;
+}
+
+.telemetry-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--color-accent);
+  width: 16px;
+  height: 16px;
+  background: var(--color-curb-red);
   border: 0;
+  border-radius: 0;
+  margin-top: -6px;
   cursor: pointer;
+  box-shadow: none;
 }
 
-.weight-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--color-accent);
+.telemetry-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--color-curb-red);
   border: 0;
+  border-radius: 0;
   cursor: pointer;
+  box-shadow: none;
 }
 
-.weight-slider::-moz-range-track {
-  height: 4px;
-  background: var(--color-bar-track);
-  border-radius: 999px;
+.telemetry-slider:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid color-mix(in srgb, var(--color-curb-red) 30%, transparent);
+  outline-offset: 2px;
+}
+
+.telemetry-slider:focus-visible::-moz-range-thumb {
+  outline: 2px solid color-mix(in srgb, var(--color-curb-red) 30%, transparent);
+  outline-offset: 2px;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Typography rhythm — reusable utility classes.
+   Display = Archivo (heavy, wide, uppercase).
+   Mono = JetBrains for all numerics/labels.
+   Body = Inter.
+   ──────────────────────────────────────────────────────────────── */
+
+.t-display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(48px, 8vw, 96px);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  text-transform: uppercase;
+}
+
+.t-headline {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+
+.t-label {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-text-muted-2);
+}
+
+.t-value {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-feature-settings: 'tnum';
+  letter-spacing: -0.01em;
+}
+
+.t-rank {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-feature-settings: 'tnum';
+  letter-spacing: -0.06em;
+  line-height: 1;
+}
+
+.t-body {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--color-text);
+}
+
+.t-body-muted {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
 }

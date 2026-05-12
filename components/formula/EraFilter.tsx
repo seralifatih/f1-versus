@@ -14,36 +14,38 @@ type Props = {
   onChange: (era: EraId) => void
 }
 
+// Connected-toolbar style: 1px gap between squared chips. Active = curb-red
+// fill + white text; inactive = transparent with border-strong outline.
 export function EraFilter({ value, onChange }: Props) {
   return (
-    <div>
-      <div className="text-[11px] text-muted uppercase tracking-[0.12em] mb-2.5">Era</div>
-      <div className="inline-flex flex-wrap gap-2">
-        {ERAS.map((e) => {
-          const active = e.id === value
-          return (
-            <button
-              key={e.id}
-              type="button"
-              onClick={() => onChange(e.id)}
-              aria-pressed={active}
+    <div className="inline-flex flex-wrap gap-px bg-border-strong">
+      {ERAS.map((e) => {
+        const active = e.id === value
+        return (
+          <button
+            key={e.id}
+            type="button"
+            onClick={() => onChange(e.id)}
+            aria-pressed={active}
+            className={
+              'px-3 py-1.5 font-mono uppercase text-[11px] tracking-[0.1em] flex items-baseline gap-2 transition-colors ' +
+              (active
+                ? 'bg-curb-red text-curb-white'
+                : 'bg-bg text-muted hover:text-text')
+            }
+          >
+            <span>{e.label}</span>
+            <span
               className={
-                'px-3.5 py-2 rounded-full border text-[13px] font-medium flex items-center gap-1.5 transition-colors duration-150 ' +
-                (active
-                  ? 'border-red bg-accent-faint'
-                  : 'border-border2 text-muted hover:text-current')
+                'text-[10px] tracking-[0.08em] ' +
+                (active ? 'opacity-80' : 'text-muted-2')
               }
             >
-              {e.label}
-              <span
-                className={'text-[11px] font-mono ' + (active ? 'opacity-60' : 'text-muted2')}
-              >
-                {e.range}
-              </span>
-            </button>
-          )
-        })}
-      </div>
+              · {e.range}
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }
