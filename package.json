@@ -1,0 +1,45 @@
+{
+  "name": "f1-versus",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "preview": "opennextjs-cloudflare && wrangler dev",
+    "deploy": "opennextjs-cloudflare && wrangler deploy",
+    "sync:f1db": "tsx scripts/sync-f1db.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "next": "^15.5.18",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "framer-motion": "^11.0.0",
+    "lucide-react": "^0.400.0",
+    "@opennextjs/cloudflare": "1.19.9",
+    "@vercel/og": "^0.6.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.11.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8.4.0",
+    "autoprefixer": "^10.4.0",
+    "wrangler": "^4.86.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.5.18",
+    "prettier": "^3.2.0",
+    "better-sqlite3": "^11.3.0",
+    "@types/better-sqlite3": "^7.6.11",
+    "@cloudflare/workers-types": "^4.20250401.0",
+    "unzipper": "^0.12.3",
+    "@types/unzipper": "^0.10.10",
+    "tsx": "^4.19.0",
+    "vitest": "^1.6.0"
+  }
+}
