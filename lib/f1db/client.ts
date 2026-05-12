@@ -88,7 +88,11 @@ async function tryD1(): Promise<Adapter | null> {
   try {
     const mod = await import('@opennextjs/cloudflare')
     const ctx = mod.getCloudflareContext()
-    const binding = ctx?.env?.DB as D1Database | undefined
+    // OpenNext's generated CloudflareEnv type starts empty — bindings are
+    // declared in wrangler.toml but not reflected in the TS type. Reach
+    // through `unknown` rather than augmenting the global type.
+    const env = ctx?.env as unknown as { DB?: D1Database } | undefined
+    const binding = env?.DB
     if (!binding) return null
     return {
       async all<T>(sql: string, params: unknown[]) {

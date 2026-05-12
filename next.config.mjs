@@ -11,9 +11,6 @@ if (process.env.USE_OPENNEXT_DEV === '1') {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    typedRoutes: false,
-  },
 }
 
 export default nextConfig

@@ -7,9 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "preview": "opennextjs-cloudflare && wrangler dev",
-    "deploy": "opennextjs-cloudflare && wrangler deploy",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "sync:f1db": "tsx scripts/sync-f1db.ts",
+    "dump:d1": "tsx scripts/dump-for-d1.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

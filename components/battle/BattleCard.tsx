@@ -6,7 +6,7 @@ import type { DriverStats, EraId } from '@/lib/f1db/types'
 import { METRIC_KEYS, METRIC_LABELS } from '@/lib/scoring/constants'
 import { score } from '@/lib/scoring/engine'
 import { PRESETS, getPreset } from '@/lib/scoring/presets'
-import type { Formula, MetricKey } from '@/lib/scoring/types'
+import type { Formula } from '@/lib/scoring/types'
 import { encodeFormula } from '@/lib/url-state/encode'
 import { flagOf } from '@/lib/flags'
 

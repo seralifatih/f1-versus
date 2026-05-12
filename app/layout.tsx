@@ -29,8 +29,16 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ['400', '700'],
 })
 
+function safeMetadataBase(): URL | undefined {
+  try {
+    return new URL(SITE_URL)
+  } catch {
+    return undefined
+  }
+}
+
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
+  metadataBase: safeMetadataBase(),
   title: 'f1·versus — GOAT Calculator',
   description:
     'Settle the GOAT debate. Build your own formula and rank every F1 driver of all time.',

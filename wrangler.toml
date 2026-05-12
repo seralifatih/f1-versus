@@ -1,21 +1,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # wrangler.toml — Cloudflare Workers + D1 config for f1-versus.
 #
-# Before this file is useful, the two D1 databases must exist. Run these
-# ONCE from a shell with `wrangler login` already done:
-#
+# Both D1 databases were created with:
 #   npx wrangler d1 create f1versus-dev
 #   npx wrangler d1 create f1versus-prod
 #
-# Each command prints a `database_id`. Paste them into the placeholders below,
-# replacing TODO_DEV_DB_ID and TODO_PROD_DB_ID.
-#
-# Then apply the schema and import data:
-#
-#   npx wrangler d1 execute f1versus-dev  --remote --file=lib/f1db/schema.sql
-#   npx wrangler d1 execute f1versus-prod --remote --file=lib/f1db/schema.sql
-#   npm run sync:f1db    # prints the data-load commands at the end
-#
+# The single live worker uses `f1versus-prod` as its DB binding. The dev D1
+# is only used when developing against a real worker via `npm run preview`.
+# Plain `next dev` uses the better-sqlite3 fallback against
+# `.cache/f1db/driver_stats.db`.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name = "f1versus"
@@ -25,17 +18,21 @@ compatibility_flags = ["nodejs_compat"]
 main = ".open-next/worker.js"
 assets = { directory = ".open-next/assets", binding = "ASSETS" }
 
-# Default (development) D1 binding. Used by `wrangler dev` and `npm run preview`.
+# Explicit so wrangler stops warning about defaults.
+workers_dev = true
+preview_urls = false
+
+# Production D1 binding (the public site).
 [[d1_databases]]
-binding = "DB"
-database_name = "f1versus-dev"
-database_id = "20b5710c-5345-4a3d-82f9-cb3dfef93d5e"
-
-# Production D1 binding. Activated by `--env production` or `wrangler deploy`.
-[env.production]
-name = "f1versus"
-
-[[env.production.d1_databases]]
 binding = "DB"
 database_name = "f1versus-prod"
 database_id = "f2edb9d4-5573-4dc0-b333-5a971a8c332a"
+
+# Dev D1 binding, only used via `npm run preview` (wrangler dev).
+[env.preview]
+name = "f1versus-preview"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "f1versus-dev"
+database_id = "20b5710c-5345-4a3d-82f9-cb3dfef93d5e"
