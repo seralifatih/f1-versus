@@ -3,8 +3,15 @@ import Script from 'next/script'
 import { Fraunces, Inter_Tight, JetBrains_Mono } from 'next/font/google'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
+import { ThemeProvider } from '@/components/theme/ThemeProvider'
 import { SITE_URL } from '@/lib/config'
 import './globals.css'
+
+// Runs synchronously in <head> before first paint. Reads localStorage
+// (or prefers-color-scheme on first visit) and sets data-theme on <html>
+// so the page paints with the correct palette — no flash of dark before
+// light for light-preference users.
+const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem('f1versus-theme');var t=s||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`
 
 const CF_ANALYTICS_TOKEN = process.env.NEXT_PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN
 
@@ -67,13 +74,19 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${fraunces.variable} ${interTight.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
     >
-      <body className="bg-ink text-[#e8e8e8] font-body antialiased">
-        <Header />
-        <main className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-12 pb-24">
-          {children}
-          <Footer />
-        </main>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="bg-ink font-body antialiased">
+        <ThemeProvider>
+          <Header />
+          <main className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-12 pb-24">
+            {children}
+            <Footer />
+          </main>
+        </ThemeProvider>
         {CF_ANALYTICS_TOKEN && (
           <Script
             id="cf-web-analytics"

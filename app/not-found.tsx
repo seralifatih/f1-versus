@@ -4,7 +4,7 @@ export default function NotFound() {
   return (
     <section className="min-h-[60vh] flex flex-col items-center justify-center text-center px-6 py-16">
       <div
-        className="font-display font-bold leading-none tracking-[-0.04em] font-vary-[opsz_144,wght_700] text-red"
+        className="font-display font-bold italic leading-none tracking-[-0.04em] font-vary-[opsz_144,wght_700] text-red"
         style={{ fontSize: 'clamp(96px, 14vw, 180px)' }}
       >
         DNF
@@ -28,7 +28,7 @@ export default function NotFound() {
         </Link>
         <Link
           href="/vs"
-          className="px-4 py-2 rounded-full border border-border2 text-[#e8e8e8] text-sm font-medium hover:border-red transition-colors"
+          className="px-4 py-2 rounded-full border border-border2 text-sm font-medium hover:border-red transition-colors"
         >
           Pick a matchup
         </Link>

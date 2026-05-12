@@ -3,12 +3,12 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   title: 'Methodology — f1·versus',
   description:
-    'How f1·versus scores every F1 driver: the data source, the nine metrics, era adjustment, and what this tool deliberately cannot measure.',
+    'How f1·versus scores every F1 driver: the data source, the nine metrics, era normalization, and what this tool deliberately cannot measure.',
 }
 
 export default function MethodologyPage() {
   return (
-    <article className="max-w-[720px] mx-auto py-8 space-y-12 leading-[1.65] text-[#d8d8d8]">
+    <article className="max-w-[720px] mx-auto py-8 space-y-12 leading-[1.65]">
       <header className="space-y-4">
         <h1
           className="font-display font-normal tracking-[-0.03em] font-vary-[opsz_144,wght_400] leading-[1.05]"
@@ -113,18 +113,16 @@ export default function MethodologyPage() {
         </Metric>
       </Section>
 
-      <Section heading="How era adjustment works">
+      <Section heading="How era normalization works">
         <p>
-          Choosing &ldquo;Era Adjusted&rdquo; (or any specific era filter) does two things.
+          Choosing &ldquo;Era Normalized&rdquo; (or any specific era filter) does two things.
           First, the driver pool is restricted to people who actually raced in that era —
           Fangio doesn&rsquo;t appear in the Modern ranking, Verstappen doesn&rsquo;t appear
           in the Golden Era one.
         </p>
         <p>
           Second, and more importantly, the min-max normalization happens{' '}
-          <em className="font-vary-[opsz_24,wght_500] not-italic text-white italic">
-            within
-          </em>{' '}
+          <em className="italic font-vary-[opsz_24,wght_500] font-semibold">within</em>{' '}
           the era. A pre-1979 driver&rsquo;s &ldquo;wins&rdquo; score isn&rsquo;t being
           compared to Hamilton&rsquo;s 100+; it&rsquo;s being compared to peers who raced 8–16
           times per season instead of 22+. This is the right correction for season length,
@@ -157,26 +155,41 @@ export default function MethodologyPage() {
         </p>
         <ul className="space-y-2 list-none pl-0">
           <li>
-            <strong className="text-white">Wet-weather wins.</strong> The weather flag in F1DB
+            <strong>Wet-weather wins.</strong> The weather flag in F1DB
             is sparse and inconsistent before 1990, and &ldquo;wet&rdquo; is a continuum, not a
             binary.
           </li>
           <li>
-            <strong className="text-white">Race craft / overtaking.</strong> Position-change
+            <strong>Race craft / overtaking.</strong> Position-change
             data only exists reliably from the late 1990s onward, and even then it conflates
             driver skill with car pace and pit-stop strategy.
           </li>
           <li>
-            <strong className="text-white">Car quality adjustment.</strong> We could attempt
+            <strong>Car quality adjustment.</strong> We could attempt
             it (regress driver results against teammate results to back out the car), but the
             assumption that teammates have equal equipment is regularly false. We&rsquo;d be
             adding noise dressed up as rigor.
           </li>
           <li>
-            <strong className="text-white">Single-race performances.</strong> Monaco 1984.
+            <strong>Single-race performances.</strong> Monaco 1984.
             Donington 1993. Brazil 2008. These belong in the lore, not in a ranking.
           </li>
         </ul>
+
+        <h3 className="font-display text-[20px] font-medium tracking-[-0.01em] font-vary-[opsz_48,wght_500] mt-8">
+          Indianapolis 500 (1950–1960)
+        </h3>
+        <p>
+          The F1DB dataset lists the Indianapolis 500 as a round of the Formula 1 World
+          Championship from 1950 to 1960. This is historically accurate but misleading: the race
+          was contested almost entirely by American oval specialists who did not race the rest
+          of the European F1 calendar, and the European F1 grid did not race at Indianapolis.
+          Including these results would put drivers who never drove a Formula 1 car against
+          Hamilton and Schumacher. So we exclude all Indianapolis 500 results from every
+          metric, and we remove drivers whose only championship appearances were at
+          Indianapolis. Drivers who raced in both F1 and Indy 500 (like Mario Andretti) are
+          kept, but only their non-Indy F1 results count.
+        </p>
       </Section>
 
       <Section heading="Limitations">
@@ -232,7 +245,7 @@ function Section({ heading, children }: { heading: string; children: React.React
 function Metric({ name, children }: { name: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <h3 className="font-display text-[20px] font-medium tracking-[-0.01em] font-vary-[opsz_48,wght_500] text-white mt-4">
+      <h3 className="font-display text-[20px] font-medium tracking-[-0.01em] font-vary-[opsz_48,wght_500] mt-4">
         {name}
       </h3>
       <p className="text-[17px]">{children}</p>

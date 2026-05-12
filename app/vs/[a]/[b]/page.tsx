@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
-import { getDriversByIds } from '@/lib/f1db/client'
-import { score } from '@/lib/scoring/engine'
+import { notFound, redirect } from 'next/navigation'
+import { getAllDriverStats, getDriversByIds } from '@/lib/f1db/client'
+import { rank, score } from '@/lib/scoring/engine'
 import { decodeFormula } from '@/lib/url-state/decode'
+import { encodeFormula } from '@/lib/url-state/encode'
 import { ogImageUrl, toUrlSearchParams, type NextSearchParams } from '@/lib/url-state/next'
 import { BattleCard } from '@/components/battle/BattleCard'
 
@@ -40,10 +41,17 @@ export async function generateMetadata({
   }
 
   const title = `${da.name} vs ${db.name} — F1 GOAT Calculator`
-  const description =
-    scoreA !== null && scoreB !== null
-      ? `Under the "${formula.label}" formula, ${da.name} scores ${scoreA.toFixed(1)} and ${db.name} scores ${scoreB.toFixed(1)}. Adjust the weights and see who comes out on top.`
-      : `Compare ${da.name} (${da.firstYear}–${da.lastYear}) and ${db.name} (${db.firstYear}–${db.lastYear}) side-by-side under the "${formula.label}" formula.`
+  let description: string
+  if (scoreA !== null && scoreB !== null) {
+    const aWins = scoreA >= scoreB
+    const higher = aWins ? da : db
+    const lower = aWins ? db : da
+    const higherScore = aWins ? scoreA : scoreB
+    const lowerScore = aWins ? scoreB : scoreA
+    description = `Compare ${da.name} and ${db.name} across 9 metrics and your custom formula. ${higher.name} scores ${higherScore.toFixed(1)}, ${lower.name} scores ${lowerScore.toFixed(1)}.`
+  } else {
+    description = `Compare ${da.name} and ${db.name} across 9 metrics and your custom formula.`
+  }
 
   const og = ogImageUrl('battle', formula, era, { a: aId, b: bId })
 
@@ -63,10 +71,20 @@ export default async function VersusPage({
   searchParams: NextSearchParams
 }) {
   const { a: aId, b: bId } = await params
-  if (aId === bId) notFound()
+  const sp = toUrlSearchParams(await searchParams)
+  const { formula, era } = decodeFormula(sp)
 
-  const { formula, era } = decodeFormula(toUrlSearchParams(await searchParams))
-  const drivers = await getDriversByIds([aId, bId], era)
+  if (aId === bId) {
+    // Same driver on both sides is nonsensical — bounce to the picker so
+    // the user can pick a second driver, preserving the current formula.
+    const params = encodeFormula(formula, era).toString()
+    redirect(`/vs${params ? `?${params}` : ''}`)
+  }
+
+  const [drivers, allDrivers] = await Promise.all([
+    getDriversByIds([aId, bId], era),
+    getAllDriverStats(era),
+  ])
   const a = drivers.find((d) => d.driverId === aId)
   const b = drivers.find((d) => d.driverId === bId)
 
@@ -74,5 +92,25 @@ export default async function VersusPage({
   // never silently serve a different era than the user asked for.
   if (!a || !b) notFound()
 
-  return <BattleCard a={a} b={b} initialFormula={formula} initialEra={era} />
+  // "More matchups": the 3 drivers closest in score to A under the current
+  // formula, excluding A and B. Computed server-side so the suggested links
+  // line up with whatever formula the URL is carrying.
+  const ranked = rank(allDrivers, formula.weights)
+  const scoredA = score(a.metrics, formula.weights)
+  const related = ranked
+    .filter((d) => d.driverId !== aId && d.driverId !== bId)
+    .map((d) => ({ driver: d, distance: Math.abs(d.score - scoredA) }))
+    .sort((x, y) => x.distance - y.distance)
+    .slice(0, 3)
+    .map((r) => r.driver)
+
+  return (
+    <BattleCard
+      a={a}
+      b={b}
+      initialFormula={formula}
+      initialEra={era}
+      related={related}
+    />
+  )
 }

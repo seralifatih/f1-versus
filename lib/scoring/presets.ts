@@ -4,9 +4,13 @@ import type { Formula } from './types'
 // tuned by hand. Reorder only if the prototype is reordered.
 export const PRESETS: readonly Formula[] = [
   {
+    // id intentionally stays 'era-adjusted' so old shared URLs still resolve;
+    // only the user-visible label changed to remove the misleading "Adjusted"
+    // wording (we don't actually rank eras against each other).
     id: 'era-adjusted',
-    label: 'Era Adjusted',
-    blurb: 'Normalized for grid size, season length, era difficulty.',
+    label: 'Era Normalized',
+    blurb:
+      'Normalized for season length and grid size within each era. Doesn’t try to rank eras against each other.',
     weights: { c: 25, w: 15, p: 10, q: 10, f: 5, r: 10, h: 15, l: 5, d: 5 },
   },
   {

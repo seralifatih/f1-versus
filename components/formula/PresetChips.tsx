@@ -18,7 +18,8 @@ export function PresetChips({ activePresetId, isCustom, onPresetChange, onToggle
         <button
           onClick={onToggleCustom}
           className={
-            'flex items-center gap-1.5 ' + (isCustom ? 'text-red' : 'text-muted2 hover:text-white')
+            'flex items-center gap-1.5 transition-colors ' +
+            (isCustom ? 'text-red' : 'text-muted2 hover:text-current')
           }
         >
           <Sliders size={12} />
@@ -34,9 +35,15 @@ export function PresetChips({ activePresetId, isCustom, onPresetChange, onToggle
               onClick={() => onPresetChange(p.id)}
               className={
                 'text-left px-4 py-3.5 rounded-[10px] border transition-colors duration-150 ' +
-                (active
-                  ? 'border-red bg-[linear-gradient(135deg,rgba(239,51,64,0.12),rgba(239,51,64,0.02))]'
-                  : 'border-border bg-panel hover:border-border2')
+                (active ? 'border-red' : 'border-border bg-panel hover:border-border2')
+              }
+              style={
+                active
+                  ? {
+                      background:
+                        'linear-gradient(135deg, var(--color-accent-gradient), transparent)',
+                    }
+                  : undefined
               }
             >
               <div className="font-display text-[17px] font-semibold tracking-[-0.01em] font-vary-[opsz_36] mb-1">

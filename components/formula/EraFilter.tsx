@@ -30,13 +30,13 @@ export function EraFilter({ value, onChange }: Props) {
               className={
                 'px-3.5 py-2 rounded-full border text-[13px] font-medium flex items-center gap-1.5 transition-colors duration-150 ' +
                 (active
-                  ? 'border-red bg-[rgba(239,51,64,0.08)] text-white'
-                  : 'border-border2 text-[#aaa] hover:text-white')
+                  ? 'border-red bg-accent-faint'
+                  : 'border-border2 text-muted hover:text-current')
               }
             >
               {e.label}
               <span
-                className={'text-[11px] font-mono ' + (active ? 'text-white/60' : 'text-[#555]')}
+                className={'text-[11px] font-mono ' + (active ? 'opacity-60' : 'text-muted2')}
               >
                 {e.range}
               </span>

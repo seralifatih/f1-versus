@@ -7,10 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "preview": "npm run fonts && opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "npm run fonts && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "sync:f1db": "tsx scripts/sync-f1db.ts",
     "dump:d1": "tsx scripts/dump-for-d1.ts",
+    "fonts": "tsx scripts/fetch-og-fonts.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

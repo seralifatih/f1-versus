@@ -2,6 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens. Dark is the brand default; light is a warmer, print-magazine
+   palette with a darker accent (#c8141f) so the red still hits AA contrast on
+   off-white surfaces. The inline script in app/layout.tsx sets data-theme
+   before first paint to avoid FOUC. */
+:root,
+[data-theme='dark'] {
+  --color-bg: #0a0a0b;
+  --color-panel: #101012;
+  --color-panel-2: #141416;
+  --color-border: #1f1f22;
+  --color-border-2: #2a2a2e;
+  --color-text: #e8e8e8;
+  --color-text-muted: #888888;
+  --color-text-muted-2: #666666;
+  --color-accent: #ef3340;
+  --color-accent-faint: rgba(239, 51, 64, 0.08);
+  --color-accent-gradient: rgba(239, 51, 64, 0.12);
+  --color-rank-podium: #ffffff;
+  --color-rank-rest: #555555;
+  --color-bar-track: #1f1f22;
+  --color-bar-loser: #2a2a2e;
+  --color-row-divider: #161618;
+}
+
+[data-theme='light'] {
+  --color-bg: #faf8f5;
+  --color-panel: #ffffff;
+  --color-panel-2: #f3efe9;
+  --color-border: #e6e1d8;
+  --color-border-2: #d3cdc1;
+  --color-text: #1a1a1c;
+  --color-text-muted: #5a5a5a;
+  --color-text-muted-2: #888888;
+  --color-accent: #c8141f;
+  --color-accent-faint: rgba(200, 20, 31, 0.06);
+  --color-accent-gradient: rgba(200, 20, 31, 0.1);
+  --color-rank-podium: #1a1a1c;
+  --color-rank-rest: #b8b3a8;
+  --color-bar-track: #ece6db;
+  --color-bar-loser: #d3cdc1;
+  --color-row-divider: #ece6db;
+}
+
 *,
 *::before,
 *::after {
@@ -19,6 +62,17 @@ body {
   padding: 0;
 }
 
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  /* Color-only transitions. Layout/transform/animation properties are not
+     in the list, so framer-motion FLIP and slider thumb tracking stay snappy. */
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
 body {
   font-family: var(--font-body), system-ui, sans-serif;
   font-variation-settings: 'opsz' 14;
@@ -28,22 +82,19 @@ body {
 }
 
 ::selection {
-  background: #ef3340;
+  background: var(--color-accent);
   color: #fff;
 }
 
 input[type='range'] {
-  accent-color: #ef3340;
+  accent-color: var(--color-accent);
 }
 
-/* Explicit thumb/track styling for the weight sliders.
-   accent-color handles modern browsers, these rules cover edge cases and
-   make the red thumb consistent across WebKit and Firefox. */
 .weight-slider {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
-  background: #1f1f22;
+  background: var(--color-bar-track);
   border-radius: 999px;
   outline: none;
 }
@@ -54,7 +105,7 @@ input[type='range'] {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #ef3340;
+  background: var(--color-accent);
   border: 0;
   cursor: pointer;
 }
@@ -63,13 +114,13 @@ input[type='range'] {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #ef3340;
+  background: var(--color-accent);
   border: 0;
   cursor: pointer;
 }
 
 .weight-slider::-moz-range-track {
   height: 4px;
-  background: #1f1f22;
+  background: var(--color-bar-track);
   border-radius: 999px;
 }

@@ -13,6 +13,11 @@ import { flagOf } from '@/lib/flags'
 // binding (`env.DB`) resolves cleanly. Forcing edge runtime trips up the
 // dev fallback in lib/f1db/client.ts because edge runtime has no Node
 // `require`. The image still renders in well under the request budget.
+//
+// Theme: OG images are intentionally always rendered in the dark palette.
+// They're server-generated and cached aggressively; we have no signal for
+// the viewer's theme preference. Dark is the brand's primary identity and
+// the most legible at thumbnail size in social feeds.
 export const dynamic = 'force-dynamic'
 
 const WIDTH = 1200
@@ -29,21 +34,23 @@ const ERA_LABEL: Record<EraId, string> = {
   modern: 'Modern · 2006–now',
 }
 
-// Fraunces is loaded once per cold start, per weight. Satori needs the binary
-// font, so we hit the Google Fonts CSS endpoint, pull the woff2 URL out, and
-// fetch it. The User-Agent matters — without it Google serves an older
-// TTF format Satori can't read.
+// Fraunces is bundled at build time by scripts/fetch-og-fonts.ts and lives
+// under public/fonts/. Worker reads it via the ASSETS binding rather than
+// fetching Google Fonts at request time — Cloudflare egress sometimes
+// can't parse Google's CSS response, which 500s the OG route.
 const fontCache = new Map<number, ArrayBuffer>()
-async function loadFraunces(weight: 400 | 700): Promise<ArrayBuffer> {
+async function loadFraunces(weight: 400 | 700, reqUrl: string): Promise<ArrayBuffer> {
   const cached = fontCache.get(weight)
   if (cached) return cached
-  const css = await fetch(
-    `https://fonts.googleapis.com/css2?family=Fraunces:wght@${weight}&display=swap`,
-    { headers: { 'User-Agent': 'Mozilla/5.0' } },
-  ).then((r) => r.text())
-  const match = css.match(/url\((https:\/\/[^)]+\.woff2)\)/)
-  if (!match) throw new Error('Could not find Fraunces woff2 URL')
-  const font = await fetch(match[1]!).then((r) => r.arrayBuffer())
+  // ASSETS binding serves files relative to the site origin. Build an
+  // absolute URL off the request so this works both in `wrangler dev`
+  // and in production.
+  const u = new URL(reqUrl)
+  u.pathname = `/fonts/fraunces-${weight}.woff2`
+  u.search = ''
+  const res = await fetch(u.toString())
+  if (!res.ok) throw new Error(`Font fetch failed: ${res.status} ${u.pathname}`)
+  const font = await res.arrayBuffer()
   fontCache.set(weight, font)
   return font
 }
@@ -53,8 +60,11 @@ export async function GET(req: Request): Promise<Response> {
   const type = url.searchParams.get('type') ?? 'ranking'
 
   try {
-    if (type === 'battle') return await renderBattle(url.searchParams)
-    return await renderRanking(url.searchParams)
+    if (type === 'battle') return await renderBattle(url.searchParams, req.url)
+    // type === 'driver' falls through to the ranking image for now. The
+    // driver detail OG is a follow-up; serving the ranking image keeps
+    // social previews valid until the dedicated layout ships.
+    return await renderRanking(url.searchParams, req.url)
   } catch (err) {
     console.error('OG render failed', err)
     return new Response('OG render failed', { status: 500 })
@@ -65,12 +75,15 @@ export async function GET(req: Request): Promise<Response> {
 // Ranking mode
 // ────────────────────────────────────────────────────────────────────────────
 
-async function renderRanking(params: URLSearchParams): Promise<Response> {
+async function renderRanking(params: URLSearchParams, reqUrl: string): Promise<Response> {
   const { formula, era } = decodeFormula(params)
   const drivers = await getAllDriverStats(era)
   const ranked = rank(drivers, formula.weights).slice(0, 10)
 
-  const [fraunceReg, fraunceBold] = await Promise.all([loadFraunces(400), loadFraunces(700)])
+  const [fraunceReg, fraunceBold] = await Promise.all([
+    loadFraunces(400, reqUrl),
+    loadFraunces(700, reqUrl),
+  ])
 
   return new ImageResponse(
     (
@@ -117,7 +130,7 @@ async function renderRanking(params: URLSearchParams): Promise<Response> {
 // Battle mode
 // ────────────────────────────────────────────────────────────────────────────
 
-async function renderBattle(params: URLSearchParams): Promise<Response> {
+async function renderBattle(params: URLSearchParams, reqUrl: string): Promise<Response> {
   const a = params.get('a')
   const b = params.get('b')
   if (!a || !b) return new Response('missing a/b', { status: 400 })
@@ -133,7 +146,10 @@ async function renderBattle(params: URLSearchParams): Promise<Response> {
 
   const scoreA = score(da.metrics, formula.weights)
   const scoreB = score(db.metrics, formula.weights)
-  const [fraunceReg, fraunceBold] = await Promise.all([loadFraunces(400), loadFraunces(700)])
+  const [fraunceReg, fraunceBold] = await Promise.all([
+    loadFraunces(400, reqUrl),
+    loadFraunces(700, reqUrl),
+  ])
 
   return new ImageResponse(
     (

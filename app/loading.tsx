@@ -48,7 +48,7 @@ function RowSkeleton({ idx }: { idx: number }) {
   const big = idx === 0
   return (
     <div
-      className="grid items-center gap-5 px-5 py-[18px] border-b border-[#161618]"
+      className="grid items-center gap-5 px-5 py-[18px] border-b border-row-divider"
       style={{ gridTemplateColumns: '64px 1fr auto auto' }}
     >
       <div

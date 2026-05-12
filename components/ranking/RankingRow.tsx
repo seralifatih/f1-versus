@@ -33,10 +33,10 @@ export function RankingRow({ driver, rank, staggerIndex }: Props) {
         opacity: { duration: 0.25, delay: staggerIndex * 0.015 },
         y: { duration: 0.25, delay: staggerIndex * 0.015 },
       }}
-      className="grid items-center gap-3 sm:gap-5 px-3 sm:px-5 py-[18px] border-b border-[#161618] [grid-template-columns:44px_1fr_auto] sm:[grid-template-columns:64px_1fr_auto_auto]"
+      className="grid items-center gap-3 sm:gap-5 px-3 sm:px-5 py-[18px] border-b border-row-divider [grid-template-columns:44px_1fr_auto] sm:[grid-template-columns:64px_1fr_auto_auto]"
       style={{
         background: isFirst
-          ? 'linear-gradient(90deg, rgba(239,51,64,0.06), transparent 40%)'
+          ? 'linear-gradient(90deg, var(--color-accent-faint), transparent 40%)'
           : undefined,
       }}
     >
@@ -48,7 +48,11 @@ export function RankingRow({ driver, rank, staggerIndex }: Props) {
           // Two breakpoint sizes per slot (mobile vs desktop). Smaller on
           // mobile keeps the 360px viewport from horizontal-scrolling.
           fontSize: isFirst ? 'clamp(36px, 8vw, 56px)' : 'clamp(24px, 5vw, 36px)',
-          color: isFirst ? '#ef3340' : isTopThree ? '#fff' : '#555',
+          color: isFirst
+            ? 'var(--color-accent)'
+            : isTopThree
+              ? 'var(--color-rank-podium)'
+              : 'var(--color-rank-rest)',
         }}
       >
         {String(rank).padStart(2, '0')}
@@ -75,10 +79,10 @@ export function RankingRow({ driver, rank, staggerIndex }: Props) {
       </div>
 
       <div className="text-right">
-        <div className="font-mono text-[20px] sm:text-[28px] font-bold text-white tracking-[-0.02em]">
+        <div className="font-mono text-[20px] sm:text-[28px] font-bold tracking-[-0.02em]">
           {driver.score.toFixed(1)}
         </div>
-        <div className="text-[10px] text-[#555] uppercase tracking-[0.1em]">Score</div>
+        <div className="text-[10px] text-muted2 uppercase tracking-[0.1em]">Score</div>
       </div>
 
       <button
@@ -95,7 +99,7 @@ export function RankingRow({ driver, rank, staggerIndex }: Props) {
         aria-label={`Compare ${driver.name} against another driver`}
         // Versus action hidden below sm — at 360px the ranking row is too
         // cramped. Mobile users navigate to /vs directly via the header.
-        className="hidden sm:flex p-2 rounded-lg border border-border text-muted2 hover:text-white hover:border-border2 transition-colors items-center justify-center"
+        className="hidden sm:flex p-2 rounded-lg border border-border text-muted2 hover:text-current hover:border-border2 transition-colors items-center justify-center"
       >
         <ArrowLeftRight size={14} />
       </button>

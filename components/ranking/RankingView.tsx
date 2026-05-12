@@ -120,13 +120,13 @@ export function RankingView({ initialRanked, initialFormula, initialEra, isCusto
           style={{ fontSize: 'clamp(40px, 6vw, 72px)', maxWidth: 900 }}
         >
           Settle the{' '}
-          <em className="not-italic text-red font-vary-[opsz_144,wght_500] italic">GOAT</em> debate.
+          <em className="italic text-red font-vary-[opsz_144,wght_500]">GOAT</em> debate.
           <br />
           Your formula, your ranking.
         </h1>
-        <p className="text-[17px] text-[#999] max-w-[620px] leading-[1.5] mt-4">
-          75 years of Formula 1 data. Six pre-built definitions of greatness, or build your own.
-          Share the ranking, start the argument.
+        <p className="text-[17px] text-muted max-w-[620px] leading-snug mt-4">
+          75 years of Formula 1 data. Six definitions of greatness, or build your own. Then
+          start the argument.
         </p>
       </section>
 
@@ -149,7 +149,7 @@ export function RankingView({ initialRanked, initialFormula, initialEra, isCusto
         <div className="relative">
           <button
             onClick={handleShare}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-border2 bg-[#161618] text-white text-xs font-medium"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-border2 bg-panel2 text-xs font-medium hover:border-red transition-colors"
           >
             <Share2 size={13} />
             Share ranking

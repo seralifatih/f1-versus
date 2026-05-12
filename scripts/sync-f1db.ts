@@ -191,12 +191,22 @@ async function unzipDb() {
 // Aggregation
 // ────────────────────────────────────────────────────────────────────────────
 
-function computeRaw(db: Database.Database, minYear: number, maxYear: number): RawRow[] {
-  // One CTE-fueled query per metric is clearer than one mega-query. SQLite
-  // handles them fine at this scale (~800 drivers, ~78 seasons).
+// Indy 500 exclusion: from 1950–1960 the Indianapolis 500 counted toward the
+// F1 World Championship despite being contested almost entirely by American
+// oval specialists who never raced the European F1 calendar. Including it
+// poisons the ranking — pure Indy drivers like Bill Vukovich and Lee Wallard
+// otherwise appear above modern F1 drivers. The grand_prix_id 'indianapolis'
+// covers exactly those 11 races; we filter it out of every race/qualifying
+// query below. Championships stay untouched (titles are season-level and the
+// Indy 500 was only one of ~8 races counting toward the title each year).
+const NON_INDY = `r.grand_prix_id <> 'indianapolis'`
+const MIN_STARTS_FOR_INCLUSION = 5
 
-  // Driver universe for this era: anyone with a race_result row inside the
-  // year window. driver.name is "First Last" already.
+function computeRaw(db: Database.Database, minYear: number, maxYear: number): RawRow[] {
+  // Driver universe for this era: anyone with at least one NON-INDY race
+  // result inside the year window. firstYear / lastYear are derived from
+  // non-Indy races only, so a driver who raced Indy '55 then F1 '56–'58
+  // shows up as 1956–1958.
   const drivers = db
     .prepare(
       `
@@ -211,6 +221,7 @@ function computeRaw(db: Database.Database, minYear: number, maxYear: number): Ra
       JOIN race r ON r.id = rr.race_id
       LEFT JOIN country c ON c.id = d.nationality_country_id
       WHERE r.year BETWEEN ? AND ?
+        AND ${NON_INDY}
       GROUP BY d.id, d.name, c.alpha2_code
     `,
     )
@@ -242,7 +253,7 @@ function computeRaw(db: Database.Database, minYear: number, maxYear: number): Ra
         SELECT rr.driver_id AS k, COUNT(*) AS v
         FROM race_result rr
         JOIN race r ON r.id = rr.race_id
-        WHERE rr.position_number = 1 AND r.year BETWEEN ? AND ?
+        WHERE rr.position_number = 1 AND r.year BETWEEN ? AND ? AND ${NON_INDY}
         GROUP BY rr.driver_id
       `,
       )
@@ -256,7 +267,7 @@ function computeRaw(db: Database.Database, minYear: number, maxYear: number): Ra
         SELECT rr.driver_id AS k, COUNT(*) AS v
         FROM race_result rr
         JOIN race r ON r.id = rr.race_id
-        WHERE rr.position_number BETWEEN 1 AND 3 AND r.year BETWEEN ? AND ?
+        WHERE rr.position_number BETWEEN 1 AND 3 AND r.year BETWEEN ? AND ? AND ${NON_INDY}
         GROUP BY rr.driver_id
       `,
       )
@@ -270,7 +281,7 @@ function computeRaw(db: Database.Database, minYear: number, maxYear: number): Ra
         SELECT qr.driver_id AS k, COUNT(*) AS v
         FROM qualifying_result qr
         JOIN race r ON r.id = qr.race_id
-        WHERE qr.position_number = 1 AND r.year BETWEEN ? AND ?
+        WHERE qr.position_number = 1 AND r.year BETWEEN ? AND ? AND ${NON_INDY}
         GROUP BY qr.driver_id
       `,
       )
@@ -285,14 +296,14 @@ function computeRaw(db: Database.Database, minYear: number, maxYear: number): Ra
         SELECT rr.driver_id AS k, COUNT(*) AS v
         FROM race_result rr
         JOIN race r ON r.id = rr.race_id
-        WHERE rr.fastest_lap = 1 AND r.year BETWEEN ? AND ?
+        WHERE rr.fastest_lap = 1 AND r.year BETWEEN ? AND ? AND ${NON_INDY}
         GROUP BY rr.driver_id
       `,
       )
       .all(minYear, maxYear) as Array<{ k: string; v: number }>,
   )
 
-  // Starts: any race_result row counts as an appearance (DNFs included).
+  // Starts: any non-Indy race_result row counts as an appearance (DNFs included).
   const starts = mapCount(
     db
       .prepare(
@@ -300,7 +311,7 @@ function computeRaw(db: Database.Database, minYear: number, maxYear: number): Ra
         SELECT rr.driver_id AS k, COUNT(*) AS v
         FROM race_result rr
         JOIN race r ON r.id = rr.race_id
-        WHERE r.year BETWEEN ? AND ?
+        WHERE r.year BETWEEN ? AND ? AND ${NON_INDY}
         GROUP BY rr.driver_id
       `,
       )
@@ -309,7 +320,7 @@ function computeRaw(db: Database.Database, minYear: number, maxYear: number): Ra
 
   // Teammate H2H race: for each (race, constructor) pair, compare the driver
   // to each other driver in the same car. Only count comparisons where BOTH
-  // drivers have a numeric position. Score = wins / total.
+  // drivers have a numeric position. Indy excluded.
   const teammateRace = mapH2H(
     db
       .prepare(
@@ -326,6 +337,7 @@ function computeRaw(db: Database.Database, minYear: number, maxYear: number): Ra
         WHERE a.position_number IS NOT NULL
           AND b.position_number IS NOT NULL
           AND r.year BETWEEN ? AND ?
+          AND ${NON_INDY}
         GROUP BY a.driver_id
       `,
       )
@@ -348,20 +360,26 @@ function computeRaw(db: Database.Database, minYear: number, maxYear: number): Ra
         WHERE a.position_number IS NOT NULL
           AND b.position_number IS NOT NULL
           AND r.year BETWEEN ? AND ?
+          AND ${NON_INDY}
         GROUP BY a.driver_id
       `,
       )
       .all(minYear, maxYear) as Array<{ k: string; wins: number; total: number }>,
   )
 
-  // Peak dominance: best 3-consecutive-season sum of points-share-of-season.
-  // points-share = driver_points_in_year / total_points_in_year.
+  // Peak dominance: season-level points share. Championships were awarded
+  // across the full calendar (including Indy in 1950-60), so we keep the
+  // season standing data intact — see comment at the top of this file.
   const peakDominance = computePeakDominance(db, minYear, maxYear)
 
   const out: RawRow[] = []
   for (const d of drivers) {
     const startCount = starts.get(d.driverId) ?? 0
-    if (startCount === 0) continue
+    // Drop pure Indy-only entries plus drivers who only ever entered a
+    // handful of races. The threshold also filters out one-off backmarkers
+    // who never made it to a second weekend; rankings stay focused on
+    // people whose career has enough non-Indy F1 data to compare meaningfully.
+    if (startCount < MIN_STARTS_FOR_INCLUSION) continue
     const winCount = wins.get(d.driverId) ?? 0
     // The 9-metric model in the prototype has a single 'h' (Teammate H2H).
     // F1DB gives us race and quali separately — average them for the metric.

@@ -16,7 +16,7 @@ export function toUrlSearchParams(sp: Awaited<NextSearchParams>): URLSearchParam
 }
 
 export function ogImageUrl(
-  kind: 'ranking' | 'battle',
+  kind: 'ranking' | 'battle' | 'driver',
   formula: Formula,
   era: EraId,
   extra: Record<string, string> = {},
