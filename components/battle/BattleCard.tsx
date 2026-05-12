@@ -11,7 +11,7 @@ import { getPreset } from '@/lib/scoring/presets'
 import type { Formula, ScoredDriver } from '@/lib/scoring/types'
 import { encodeFormula } from '@/lib/url-state/encode'
 import { flagOf } from '@/lib/flags'
-import { initialsFor, raceNumberFor } from '@/lib/driver-numbers'
+import { initialsFromName, raceNumberFor } from '@/lib/race-numbers'
 import { RaceNumberBox } from '@/components/atoms/RaceNumberBox'
 import { SectionMarker } from '@/components/atoms/SectionMarker'
 import { EraFilter } from '@/components/formula/EraFilter'
@@ -259,7 +259,7 @@ function DriverIdentity({
   const numberBox = (
     <RaceNumberBox
       number={number}
-      initials={number ? null : initialsFor(driver.name)}
+      initials={number ? null : initialsFromName(driver.name)}
       accent={winning ? 'sector-purple' : 'muted'}
     />
   )

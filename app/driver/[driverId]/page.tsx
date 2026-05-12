@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowLeftRight, ArrowRight, HelpCircle } from 'lucide-react'
 import { getAllDriverStats, getDriverById } from '@/lib/f1db/client'
 import type { DriverStats, EraId } from '@/lib/f1db/types'
 import { flagOf } from '@/lib/flags'
-import { initialsFor, raceNumberFor } from '@/lib/driver-numbers'
+import { initialsFromName, raceNumberFor } from '@/lib/race-numbers'
 import { rank, score } from '@/lib/scoring/engine'
 import { METRIC_KEYS, METRIC_LABELS, METRIC_TOOLTIPS } from '@/lib/scoring/constants'
 import type { ScoredDriver } from '@/lib/scoring/types'
@@ -181,7 +181,7 @@ function Hero({
           <div className="shrink-0">
             <RaceNumberBox
               number={number}
-              initials={number ? null : initialsFor(name)}
+              initials={number ? null : initialsFromName(name)}
               accent="sector-purple"
             />
           </div>

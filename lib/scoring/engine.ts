@@ -21,6 +21,11 @@ export function score(metrics: DriverStats['metrics'], weights: Weights): number
 /**
  * Scores every driver, sorts by score descending, attaches a "why" string
  * to the top 5. Returns the full list — the caller decides how many to render.
+ *
+ * Tie-break order when two drivers share the same (1-decimal-rounded)
+ * score: more championships → more wins → earlier firstYear. These keep
+ * the top of the table stable across slider tweaks instead of letting
+ * Array.sort's implementation-defined order pick the winner.
  */
 export function rank(drivers: DriverStats[], weights: Weights): ScoredDriver[] {
   const scored: ScoredDriver[] = drivers.map((d) => ({
@@ -29,7 +34,12 @@ export function rank(drivers: DriverStats[], weights: Weights): ScoredDriver[] {
     why: '',
   }))
 
-  scored.sort((a, b) => b.score - a.score)
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    if (b.metrics.c !== a.metrics.c) return b.metrics.c - a.metrics.c
+    if (b.metrics.w !== a.metrics.w) return b.metrics.w - a.metrics.w
+    return a.firstYear - b.firstYear
+  })
 
   const TOP_N = 5
   for (let i = 0; i < Math.min(TOP_N, scored.length); i++) {

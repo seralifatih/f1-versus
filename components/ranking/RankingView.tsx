@@ -14,7 +14,7 @@ import { EraFilter } from '@/components/formula/EraFilter'
 import { PresetChips } from '@/components/formula/PresetChips'
 import { CustomSliders } from '@/components/formula/CustomSliders'
 import { RankingList } from './RankingList'
-import { StartLights } from './StartLights'
+import { RaceStartLights } from '@/components/intro/RaceStartLights'
 
 type Props = {
   initialRanked: ScoredDriver[]
@@ -28,6 +28,10 @@ export function RankingView({ initialRanked, initialFormula, initialEra, isCusto
   const [formula, setFormula] = useState<Formula>(initialFormula)
   const [custom, setCustom] = useState<boolean>(isCustom)
   const [toastVisible, setToastVisible] = useState(false)
+  // Race-start lights gate. Held false until RaceStartLights fires its
+  // onComplete callback — either after the 1.4s sequence, or immediately
+  // for returning sessions / reduced-motion users.
+  const [introDone, setIntroDone] = useState(false)
 
   useEffect(() => setFormula(initialFormula), [initialFormula])
   useEffect(() => setCustom(isCustom), [isCustom])
@@ -118,10 +122,14 @@ export function RankingView({ initialRanked, initialFormula, initialEra, isCusto
             <h1 className="t-display m-0">
               <span className="block">The F1 GOAT</span>
               <span className="block">Question</span>
-              <span className="block text-sector-purple">
-                <span aria-hidden="true">[ </span>
-                Solved Your Way
-                <span aria-hidden="true"> ]</span>
+              {/* Third line is a regulatory-stamp annotation: 75% of the
+                  display size, sector-purple hairline border. Inline-block
+                  so the border hugs the text instead of stretching to the
+                  column width. */}
+              <span className="block mt-3 text-[75%]">
+                <span className="inline-block border border-sector-purple text-sector-purple px-3 py-1 leading-[1]">
+                  Solved Your Way
+                </span>
               </span>
             </h1>
             <p className="t-body-muted mt-6 max-w-[640px]">
@@ -172,9 +180,15 @@ export function RankingView({ initialRanked, initialFormula, initialEra, isCusto
           />
           <ShareButton onShare={handleShare} copied={toastVisible} />
         </div>
-        <StartLights>
+        <RaceStartLights onComplete={() => setIntroDone(true)} />
+        <div
+          style={{
+            opacity: introDone ? 1 : 0.3,
+            transition: 'opacity 200ms ease-out',
+          }}
+        >
           <RankingList ranked={ranked} />
-        </StartLights>
+        </div>
       </section>
     </div>
   )

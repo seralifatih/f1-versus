@@ -6,7 +6,7 @@ import { ArrowLeftRight } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { flagOf } from '@/lib/flags'
-import { initialsFor, raceNumberFor } from '@/lib/driver-numbers'
+import { initialsFromName, raceNumberFor } from '@/lib/race-numbers'
 import type { ScoredDriver } from '@/lib/scoring/types'
 import { RaceNumberBox, type RaceNumberAccent } from '@/components/atoms/RaceNumberBox'
 import { SectorBar, type SectorState } from '@/components/atoms/SectorBar'
@@ -23,6 +23,10 @@ type Props = {
   // so the row doesn't have to know the wider ranking list.
   above?: { driverId: string; name: string } | null
   below?: { driverId: string; name: string } | null
+  // True if this row shares its score with at least one neighbor.
+  // firstOfTie controls whether the "EQUAL SCORE" label is rendered.
+  tied?: boolean
+  firstOfTie?: boolean
 }
 
 function rankBand(rank: number): 'top3' | 'top10' | 'rest' {
@@ -56,6 +60,8 @@ export function RankingRow({
   delta = 0,
   above = null,
   below = null,
+  tied = false,
+  firstOfTie = false,
 }: Props) {
   const router = useRouter()
   const flag = flagOf(driver.countryCode)
@@ -121,18 +127,35 @@ export function RankingRow({
       )}
 
       {/* CELL 1 — RANK */}
-      <div
-        className={`t-rank text-right ${RANK_COLOR[band]}`}
-        style={{ fontSize: 'clamp(36px, 7vw, 56px)' }}
-      >
-        {String(rank).padStart(2, '0')}
+      <div className="text-right">
+        <div
+          className={`t-rank ${RANK_COLOR[band]}`}
+          style={{
+            fontSize: 'clamp(36px, 7vw, 56px)',
+            // Tied rows desaturate slightly — keeps band hierarchy but
+            // signals "this position is shared".
+            opacity: tied ? 0.7 : 1,
+          }}
+        >
+          {tied && (
+            <span className="font-mono text-muted-2 mr-[0.05em]" aria-hidden="true">
+              T
+            </span>
+          )}
+          {String(rank).padStart(2, '0')}
+        </div>
+        {firstOfTie && (
+          <div className="hidden sm:block t-label mt-1" aria-label="Equal score with following rows">
+            Equal Score
+          </div>
+        )}
       </div>
 
       {/* CELL 2 — RACE NUMBER */}
       <div className="flex justify-center">
         <RaceNumberBox
           number={number}
-          initials={number ? null : initialsFor(driver.name)}
+          initials={number ? null : initialsFromName(driver.name)}
           accent={NUMBER_ACCENT[band]}
         />
       </div>

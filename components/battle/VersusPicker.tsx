@@ -7,7 +7,7 @@ import type { EraId } from '@/lib/f1db/types'
 import type { Formula, ScoredDriver } from '@/lib/scoring/types'
 import { encodeFormula } from '@/lib/url-state/encode'
 import { flagOf } from '@/lib/flags'
-import { initialsFor, raceNumberFor } from '@/lib/driver-numbers'
+import { initialsFromName, raceNumberFor } from '@/lib/race-numbers'
 import { SectionMarker } from '@/components/atoms/SectionMarker'
 import { RaceNumberBox } from '@/components/atoms/RaceNumberBox'
 
@@ -122,7 +122,7 @@ export function VersusPicker({ ranked, formula, era, seedDriverId }: Props) {
               </span>
               <RaceNumberBox
                 number={number}
-                initials={number ? null : initialsFor(d.name)}
+                initials={number ? null : initialsFromName(d.name)}
                 accent={checked ? 'sector-purple' : 'muted'}
               />
               <span className="flex items-center gap-2.5 min-w-0">

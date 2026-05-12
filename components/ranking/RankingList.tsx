@@ -30,6 +30,24 @@ export function RankingList({ ranked, limit = 20 }: Props) {
     return snapshot
   }, [rows])
 
+  // Tie metadata per row. Uses "1224" ranking: tied drivers share their
+  // group's leading position; the row after a tie group skips to its
+  // natural index (T04, T04, 06 — not T04, T04, T04, 07).
+  const tieInfo = useMemo(() => {
+    return rows.map((d, idx) => {
+      const prev = rows[idx - 1]
+      const next = rows[idx + 1]
+      const tiedWithPrev = prev?.score === d.score
+      const tiedWithNext = next?.score === d.score
+      const tied = tiedWithPrev || tiedWithNext
+      return {
+        tied,
+        // Only the first row of a tie group renders the "EQUAL SCORE" label.
+        firstOfTie: tied && !tiedWithPrev,
+      }
+    })
+  }, [rows])
+
   return (
     <section className="border-y border-border-strong bg-panel">
       <AnimatePresence mode="popLayout" initial={false}>
@@ -41,6 +59,7 @@ export function RankingList({ ranked, limit = 20 }: Props) {
           const delta = prev !== undefined ? prev - rank : 0
           const aboveRow = rows[idx - 1]
           const belowRow = rows[idx + 1]
+          const info = tieInfo[idx]!
           return (
             <RankingRow
               key={d.driverId}
@@ -50,6 +69,8 @@ export function RankingList({ ranked, limit = 20 }: Props) {
               delta={delta}
               above={aboveRow ? { driverId: aboveRow.driverId, name: aboveRow.name } : null}
               below={belowRow ? { driverId: belowRow.driverId, name: belowRow.name } : null}
+              tied={info.tied}
+              firstOfTie={info.firstOfTie}
             />
           )
         })}

@@ -6,7 +6,7 @@ import { decodeFormula } from '@/lib/url-state/decode'
 import { isEraId, type EraId } from '@/lib/f1db/types'
 import type { DriverStats } from '@/lib/f1db/types'
 import { flagOf } from '@/lib/flags'
-import { initialsFor, raceNumberFor } from '@/lib/driver-numbers'
+import { initialsFromName, raceNumberFor } from '@/lib/race-numbers'
 import { BUILD_DATA_VERSION, BUILD_DATA_SYNC, APP_VERSION } from '@/lib/build-info'
 
 // OG images are intentionally always rendered in the dark palette — they
@@ -407,7 +407,7 @@ function RankingRow({
           fontWeight: 800,
         }}
       >
-        {number ?? initialsFor(name)}
+        {number ?? initialsFromName(name)}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
         <span style={{ fontSize: 24 }}>{flagOf(countryCode)}</span>
@@ -484,7 +484,7 @@ function BattleColumn({
             fontWeight: 800,
           }}
         >
-          {number ?? initialsFor(driver.name)}
+          {number ?? initialsFromName(driver.name)}
         </div>
         <span style={{ fontSize: 40 }}>{flagOf(driver.countryCode)}</span>
       </div>

@@ -3,13 +3,17 @@ import type { DriverStats } from '@/lib/f1db/types'
 import type { Weights } from './types'
 import { rank, score } from './engine'
 
-function driver(driverId: string, metrics: DriverStats['metrics']): DriverStats {
+function driver(
+  driverId: string,
+  metrics: DriverStats['metrics'],
+  firstYear = 2000,
+): DriverStats {
   return {
     driverId,
     name: driverId,
     countryCode: 'XX',
-    firstYear: 2000,
-    lastYear: 2010,
+    firstYear,
+    lastYear: firstYear + 10,
     metrics,
   }
 }
@@ -112,5 +116,39 @@ describe('rank()', () => {
     const w: Weights = { ...ZERO_WEIGHTS, c: 30, l: 5 }
     const [top] = rank([drv], w)
     expect(top?.why.toLowerCase()).toContain('championships')
+  })
+
+  describe('tie-break', () => {
+    // All three drivers tie on score (only `p` is weighted, p=50 for all);
+    // ordering must come from the c → w → firstYear cascade.
+    const pOnly: Weights = { ...ZERO_WEIGHTS, p: 10 }
+
+    it('breaks ties on championships first', () => {
+      const tied: DriverStats[] = [
+        driver('low-c', { ...ZERO_METRICS, p: 50, c: 10, w: 90 }),
+        driver('high-c', { ...ZERO_METRICS, p: 50, c: 90, w: 10 }),
+      ]
+      const ids = rank(tied, pOnly).map((r) => r.driverId)
+      expect(ids).toEqual(['high-c', 'low-c'])
+    })
+
+    it('falls through to wins when championships also tie', () => {
+      const tied: DriverStats[] = [
+        driver('low-w', { ...ZERO_METRICS, p: 50, c: 50, w: 10 }),
+        driver('high-w', { ...ZERO_METRICS, p: 50, c: 50, w: 90 }),
+      ]
+      const ids = rank(tied, pOnly).map((r) => r.driverId)
+      expect(ids).toEqual(['high-w', 'low-w'])
+    })
+
+    it('falls through to firstYear when c and w also tie (earlier wins)', () => {
+      const tied: DriverStats[] = [
+        driver('newer', { ...ZERO_METRICS, p: 50, c: 50, w: 50 }, 1990),
+        driver('older', { ...ZERO_METRICS, p: 50, c: 50, w: 50 }, 1950),
+      ]
+      const ids = rank(tied, pOnly).map((r) => r.driverId)
+      expect(ids).toEqual(['older', 'newer'])
+    })
+
   })
 })
