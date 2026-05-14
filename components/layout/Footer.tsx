@@ -7,7 +7,7 @@ import {
 
 export function Footer() {
   return (
-    <footer className="mt-16 pt-4 border-t border-border-strong font-mono uppercase text-[10px] tracking-[0.12em] text-muted-2 flex flex-wrap items-start justify-between gap-y-1 gap-x-6">
+    <footer className="mt-16 pt-4 border-t border-border-strong font-mono uppercase text-[12px] tracking-[0.12em] text-muted-2 flex flex-wrap items-start justify-between gap-y-1 gap-x-6">
       <div className="space-y-1">
         <div>
           DATA{' '}
@@ -24,7 +24,7 @@ export function Footer() {
         <div>
           Unofficial · Built by{' '}
           <a
-            href="https://noktastudio.com"
+            href="https://noktastudio.dev"
             target="_blank"
             rel="noopener noreferrer"
             className="text-curb-red hover:underline"
@@ -32,6 +32,10 @@ export function Footer() {
             Nokta Studio
           </a>{' '}
           · MIT Licensed
+        </div>
+        <div>
+          Not affiliated with or endorsed by Formula 1, FIA, or FOM. F1, Formula
+          One, and related marks are trademarks of Formula One Licensing BV.
         </div>
       </div>
       <div className="text-right md:text-right">
