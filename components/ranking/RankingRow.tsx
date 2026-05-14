@@ -171,7 +171,7 @@ export function RankingRow({
             {driver.name}
           </Link>
         </div>
-        <div className="mt-1 font-mono uppercase text-[10px] tracking-[0.1em] text-muted-2">
+        <div className="mt-1 font-mono uppercase text-[12px] tracking-[0.1em] text-muted-2">
           {/* TODO(fatih): expose raw WDC count from DriverStats so we can
               render "· N WDC" here. Today only the normalized 0-100 metric
               is available, which doesn't survive era filters cleanly. */}

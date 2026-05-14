@@ -45,7 +45,7 @@ export function CustomSliders({ weights, onWeightChange }: Props) {
                   aria-label={METRIC_TOOLTIPS[key]}
                   className="text-muted-2 hover:text-text cursor-help transition-colors"
                 >
-                  <HelpCircle size={11} />
+                  <HelpCircle size={13} />
                 </span>
               </div>
               <span className={`t-value text-[24px] leading-none ${valueColor(value)}`}>

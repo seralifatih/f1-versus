@@ -28,7 +28,7 @@ export function EraFilter({ value, onChange }: Props) {
             onClick={() => onChange(e.id)}
             aria-pressed={active}
             className={
-              'px-3 py-1.5 font-mono uppercase text-[11px] tracking-[0.1em] flex items-baseline gap-2 transition-colors ' +
+              'px-3.5 py-2 font-mono uppercase text-[13px] tracking-[0.1em] flex items-baseline gap-2 transition-colors ' +
               (active
                 ? 'bg-curb-red text-curb-white'
                 : 'bg-bg text-muted hover:text-text')
@@ -37,7 +37,7 @@ export function EraFilter({ value, onChange }: Props) {
             <span>{e.label}</span>
             <span
               className={
-                'text-[10px] tracking-[0.08em] ' +
+                'text-[12px] tracking-[0.08em] ' +
                 (active ? 'opacity-80' : 'text-muted-2')
               }
             >

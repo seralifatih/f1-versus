@@ -40,18 +40,15 @@ export function PresetChips({ activePresetId, isCustom, onPresetChange, onToggle
         <button
           onClick={onToggleCustom}
           className={
-            'flex items-center gap-1.5 font-mono uppercase text-[11px] tracking-[0.1em] transition-colors ' +
+            'flex items-center gap-1.5 font-mono uppercase text-[13px] tracking-[0.1em] transition-colors ' +
             (isCustom ? 'text-curb-red' : 'text-muted hover:text-text')
           }
         >
-          <Sliders size={11} />
+          <Sliders size={13} />
           Custom Mode
         </button>
       </div>
-      <div
-        className="grid gap-px bg-border-strong"
-        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}
-      >
+      <div className="grid gap-px bg-border-strong grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 auto-rows-fr">
         {PRESETS.map((p, idx) => {
           const active = !isCustom && p.id === activePresetId
           const code = `A.${String(idx + 1).padStart(2, '0')}`
@@ -77,17 +74,17 @@ export function PresetChips({ activePresetId, isCustom, onPresetChange, onToggle
                 <span className="t-label">{p.label.toUpperCase()}</span>
                 <span className="t-label text-muted-2">{code}</span>
               </div>
-              <div className="font-display font-bold uppercase text-[18px] tracking-[-0.02em] leading-tight mt-3">
+              <div className="font-display font-bold uppercase text-[20px] tracking-[-0.02em] leading-tight mt-3">
                 {p.label}
               </div>
               <div className="t-body-muted mt-2 leading-snug">{p.blurb}</div>
               <div className="mt-4 flex items-end gap-1.5">
                 {top.map((m) => (
                   <div key={m.key} className="flex flex-col items-center gap-1">
-                    <div className="border border-border-strong w-9 h-9 flex items-center justify-center t-value text-[13px] text-text">
+                    <div className="border border-border-strong w-10 h-10 flex items-center justify-center t-value text-[15px] text-text">
                       {m.weight}
                     </div>
-                    <span className="font-mono uppercase text-[9px] tracking-[0.08em] text-muted-2">
+                    <span className="font-mono uppercase text-[11px] tracking-[0.08em] text-muted-2">
                       {METRIC_SHORT[m.key]}
                     </span>
                   </div>

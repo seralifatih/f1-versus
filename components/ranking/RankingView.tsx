@@ -200,7 +200,7 @@ function ShareButton({ onShare, copied }: { onShare: () => void; copied: boolean
       onClick={onShare}
       aria-live="polite"
       className={
-        'relative flex items-center gap-1.5 px-3 py-1.5 border text-[11px] font-mono uppercase tracking-[0.1em] transition-colors overflow-hidden ' +
+        'relative flex items-center gap-1.5 px-3.5 py-2 border text-[13px] font-mono uppercase tracking-[0.1em] transition-colors overflow-hidden ' +
         (copied
           ? 'border-sector-green text-sector-green'
           : 'border-border-strong text-muted hover:text-curb-red hover:border-curb-red')
@@ -216,7 +216,7 @@ function ShareButton({ onShare, copied }: { onShare: () => void; copied: boolean
         />
       )}
       <span className="relative flex items-center gap-1.5">
-        {copied ? <Check size={12} /> : <Share2 size={12} />}
+        {copied ? <Check size={14} /> : <Share2 size={14} />}
         {copied ? 'URL Copied' : 'Share Ranking'}
       </span>
     </button>
