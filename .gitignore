@@ -49,3 +49,6 @@ yarn-error.log*
 # editor
 .idea
 .vscode
+
+# local diagnostic/working notes (not for the public repo)
+DIAGNOSIS.md
