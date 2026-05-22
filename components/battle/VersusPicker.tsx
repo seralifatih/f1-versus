@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeftRight } from 'lucide-react'
+import { ArrowLeftRight, Search, X } from 'lucide-react'
 import type { EraId } from '@/lib/f1db/types'
 import type { Formula, ScoredDriver } from '@/lib/scoring/types'
 import { encodeFormula } from '@/lib/url-state/encode'
@@ -24,12 +24,36 @@ export function VersusPicker({ ranked, formula, era, seedDriverId }: Props) {
   const router = useRouter()
   // FIFO queue — oldest selection drops out when a 3rd is clicked.
   const [picks, setPicks] = useState<string[]>(seedDriverId ? [seedDriverId] : [])
+  const [query, setQuery] = useState('')
 
   const driverById = useMemo(() => {
     const m = new Map<string, ScoredDriver>()
     for (const d of ranked) m.set(d.driverId, d)
     return m
   }, [ranked])
+
+  // Pre-stamp each driver with its global rank in `ranked` before any filter,
+  // so the rank label stays stable when the user searches (filtering to a
+  // mid-pack driver still shows their real ranking, not "01").
+  const indexed = useMemo(
+    () => ranked.map((driver, i) => ({ driver, rank: i + 1 })),
+    [ranked],
+  )
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const filtered = useMemo(() => {
+    if (!normalizedQuery) return indexed
+    // Match both driverName (human-readable, may contain diacritics) and
+    // driverId (slug, ascii-only) so "hulk" finds nico-hulkenberg even though
+    // the display name is Hülkenberg.
+    return indexed.filter(
+      ({ driver }) =>
+        driver.name.toLowerCase().includes(normalizedQuery) ||
+        driver.driverId.toLowerCase().includes(normalizedQuery),
+    )
+  }, [indexed, normalizedQuery])
+
+  const showCounter = filtered.length !== ranked.length
 
   const togglePick = (driverId: string) => {
     setPicks((prev) => {
@@ -102,55 +126,89 @@ export function VersusPicker({ ranked, formula, era, seedDriverId }: Props) {
       </div>
 
       <section className="border-y border-border-strong bg-panel">
-        {ranked.slice(0, 50).map((d, idx) => {
-          const checked = picks.includes(d.driverId)
-          const flag = flagOf(d.countryCode)
-          const number = raceNumberFor(d.driverId)
-          return (
+        <div className="flex items-center gap-3 px-3 sm:px-5 py-3 border-b border-border-strong">
+          <Search size={14} className="text-muted-2 shrink-0" aria-hidden="true" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${ranked.length} drivers...`}
+            aria-label="Search drivers"
+            className="flex-1 min-w-0 bg-transparent outline-none border-0 font-mono uppercase text-[12px] tracking-[0.08em] text-text placeholder:text-muted-2 placeholder:normal-case placeholder:tracking-normal"
+          />
+          {query && (
             <button
-              key={d.driverId}
               type="button"
-              onClick={() => togglePick(d.driverId)}
-              className={
-                'w-full grid items-center gap-3 sm:gap-5 px-3 sm:px-5 py-3 border-b border-border text-left transition-colors ' +
-                '[grid-template-columns:36px_32px_1fr_auto_24px] sm:[grid-template-columns:48px_36px_1fr_auto_24px] ' +
-                (checked ? 'bg-panel-raised' : 'hover:bg-panel-2')
-              }
+              onClick={() => setQuery('')}
+              aria-label="Clear search"
+              className="shrink-0 text-muted-2 hover:text-text transition-colors"
             >
-              <span className="t-rank text-muted text-right" style={{ fontSize: 22 }}>
-                {String(idx + 1).padStart(2, '0')}
-              </span>
-              <RaceNumberBox
-                number={number}
-                initials={number ? null : initialsFromName(d.name)}
-                accent={checked ? 'sector-purple' : 'muted'}
-              />
-              <span className="flex items-center gap-2.5 min-w-0">
-                <span className="text-base shrink-0" aria-hidden="true">{flag}</span>
-                <span className="font-display font-bold uppercase tracking-[-0.02em] text-[14px] sm:text-[16px] truncate">
-                  {d.name}
-                </span>
-                <span className="hidden sm:inline font-mono uppercase text-[10px] tracking-[0.1em] text-muted-2">
-                  {d.firstYear}–{d.lastYear}
-                </span>
-              </span>
-              <span className="t-value text-text text-[14px] sm:text-[16px] tabular">
-                {d.score.toFixed(1)}
-              </span>
-              <span
-                aria-hidden
-                className={
-                  'w-5 h-5 border flex items-center justify-center justify-self-end transition-colors ' +
-                  (checked
-                    ? 'border-curb-red bg-curb-red text-curb-white'
-                    : 'border-border-strong')
-                }
-              >
-                {checked ? '✓' : ''}
-              </span>
+              <X size={14} />
             </button>
-          )
-        })}
+          )}
+        </div>
+        {showCounter && (
+          <div className="px-3 sm:px-5 py-2 border-b border-border font-mono uppercase text-[10px] tracking-[0.1em] text-muted-2">
+            Showing {filtered.length} of {ranked.length}
+          </div>
+        )}
+        <div className="max-h-[60vh] md:max-h-[600px] overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 sm:px-5 py-12 text-center font-mono uppercase text-[11px] tracking-[0.1em] text-muted-2">
+              No drivers match &ldquo;{query}&rdquo;.
+            </div>
+          ) : (
+            filtered.map(({ driver: d, rank }) => {
+              const checked = picks.includes(d.driverId)
+              const flag = flagOf(d.countryCode)
+              const number = raceNumberFor(d.driverId)
+              return (
+                <button
+                  key={d.driverId}
+                  type="button"
+                  onClick={() => togglePick(d.driverId)}
+                  className={
+                    'w-full grid items-center gap-3 sm:gap-5 px-3 sm:px-5 py-3 border-b border-border text-left transition-colors ' +
+                    '[grid-template-columns:36px_32px_1fr_auto_24px] sm:[grid-template-columns:48px_36px_1fr_auto_24px] ' +
+                    (checked ? 'bg-panel-raised' : 'hover:bg-panel-2')
+                  }
+                >
+                  <span className="t-rank text-muted text-right" style={{ fontSize: 22 }}>
+                    {String(rank).padStart(2, '0')}
+                  </span>
+                  <RaceNumberBox
+                    number={number}
+                    initials={number ? null : initialsFromName(d.name)}
+                    accent={checked ? 'sector-purple' : 'muted'}
+                  />
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-base shrink-0" aria-hidden="true">{flag}</span>
+                    <span className="font-display font-bold uppercase tracking-[-0.02em] text-[14px] sm:text-[16px] truncate">
+                      {d.name}
+                    </span>
+                    <span className="hidden sm:inline font-mono uppercase text-[10px] tracking-[0.1em] text-muted-2">
+                      {d.firstYear}–{d.lastYear}
+                    </span>
+                  </span>
+                  <span className="t-value text-text text-[14px] sm:text-[16px] tabular">
+                    {d.score.toFixed(1)}
+                  </span>
+                  <span
+                    aria-hidden
+                    className={
+                      'w-5 h-5 border flex items-center justify-center justify-self-end transition-colors ' +
+                      (checked
+                        ? 'border-curb-red bg-curb-red text-curb-white'
+                        : 'border-border-strong')
+                    }
+                  >
+                    {checked ? '✓' : ''}
+                  </span>
+                </button>
+              )
+            })
+          )}
+        </div>
       </section>
     </div>
   )
