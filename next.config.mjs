@@ -11,6 +11,7 @@ if (process.env.USE_OPENNEXT_DEV === '1') {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
 }
 
 export default nextConfig
