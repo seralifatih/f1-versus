@@ -1,6 +1,5 @@
 import {
   APP_VERSION,
-  BUILD_DATA_SYNC,
   BUILD_DATA_VERSION,
   TOTAL_DRIVERS,
 } from '@/lib/build-info'
@@ -19,7 +18,7 @@ export function Footer() {
           >
             {BUILD_DATA_VERSION}
           </a>{' '}
-          · {TOTAL_DRIVERS.toLocaleString()} Drivers · Last Sync {BUILD_DATA_SYNC}
+          · {TOTAL_DRIVERS.toLocaleString()} Drivers
         </div>
         <div>
           Unofficial · Built by{' '}

@@ -4,7 +4,6 @@ import { usePathname } from 'next/navigation'
 import { ScrollIndicator } from '@/components/ranking/ScrollIndicator'
 import {
   APP_VERSION,
-  BUILD_DATA_SYNC,
   BUILD_DATA_VERSION,
   SEASON_STATUS,
 } from '@/lib/build-info'
@@ -18,8 +17,7 @@ export function RightGutter() {
   return (
     <div className="flex flex-col items-start gap-1 leading-tight">
       <span>{BUILD_DATA_VERSION}</span>
-      <span>SYNC {BUILD_DATA_SYNC}</span>
-      <span className="text-curb-red mt-2">{SEASON_STATUS}</span>
+<span className="text-curb-red mt-2">{SEASON_STATUS}</span>
       <span className="mt-auto pt-6">{APP_VERSION}</span>
       {onRanking && <ScrollIndicator />}
     </div>

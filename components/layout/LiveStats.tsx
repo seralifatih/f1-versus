@@ -1,5 +1,4 @@
 import {
-  BUILD_DATA_SYNC,
   TOTAL_DRIVERS,
   TOTAL_RACES,
   TOTAL_SEASONS,
@@ -14,7 +13,6 @@ const ROWS: Row[] = [
   { label: 'Drivers', value: TOTAL_DRIVERS.toLocaleString() },
   { label: 'Seasons', value: TOTAL_SEASONS.toString() },
   { label: 'Races', value: TOTAL_RACES.toLocaleString() },
-  { label: 'Last Sync', value: BUILD_DATA_SYNC },
 ]
 
 // Race-control style stat block. Bordered card, each row separated by a
