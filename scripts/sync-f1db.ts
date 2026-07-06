@@ -153,13 +153,23 @@ async function downloadLatestRelease(): Promise<string> {
   }
 
   console.log('→ Fetching latest F1DB release metadata…')
+  const apiHeaders: Record<string, string> = {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'f1-versus-sync',
+  }
+  if (process.env.GITHUB_TOKEN) {
+    apiHeaders['Authorization'] = `Bearer ${process.env.GITHUB_TOKEN}`
+  }
   const res = await fetch('https://api.github.com/repos/f1db/f1db/releases/latest', {
-    headers: {
-      'User-Agent': 'f1-versus-sync',
-      Accept: 'application/vnd.github+json',
-    },
+    headers: apiHeaders,
   })
-  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`)
+  if (!res.ok) {
+    const body = await res.text()
+    if (res.status === 403 && body.includes('rate limit')) {
+      throw new Error(`GitHub API rate limit exceeded. Set GITHUB_TOKEN env var to authenticate and get 5000 req/h instead of 60.\n${body}`)
+    }
+    throw new Error(`GitHub API ${res.status}: ${body}`)
+  }
   const release = (await res.json()) as {
     tag_name: string
     assets: Array<{ name: string; browser_download_url: string }>
